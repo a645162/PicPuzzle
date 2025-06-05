@@ -51,6 +51,7 @@ class PuzzleModel:
         self.grid: List[List[GridCell]] = []
         self.used_images: List[ImageInfo] = []
         self.unused_images: List[ImageInfo] = []
+        self.image_directory: Optional[Path] = None  # 图片目录路径
         self._initialize_grid()
 
     def _initialize_grid(self):
@@ -165,6 +166,9 @@ class PuzzleModel:
 
         if not directory.exists() or not directory.is_dir():
             return loaded_count
+
+        # 保存图片目录路径
+        self.image_directory = directory
 
         for file_path in directory.iterdir():
             if file_path.suffix.lower() in config.SUPPORTED_IMAGE_FORMATS:

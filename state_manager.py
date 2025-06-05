@@ -39,6 +39,7 @@ class StateManager:
         state_data = {
             "version": "1.0",
             "timestamp": datetime.now().isoformat(),
+            "image_directory": str(model.image_directory) if model.image_directory else None,
             "grid_config": {
                 "rows": model.rows,
                 "cols": model.cols,
@@ -50,8 +51,8 @@ class StateManager:
                 "output_spacing": config.OUTPUT_SPACING,
             },
             "images": {
-                "unused": [self._serialize_image(img) for img in model.unused_images],
-                "used": [self._serialize_image(img) for img in model.used_images],
+                "unused": [self._serialize_image(img, model.image_directory) for img in model.unused_images],
+                "used": [self._serialize_image(img, model.image_directory) for img in model.used_images],
             },
             "grid_layout": [],
         }
@@ -148,19 +149,36 @@ class StateManager:
             print(f"应用状态到模型失败: {e}")
             return False
 
-    def _serialize_image(self, image_info: ImageInfo) -> Dict[str, Any]:
+    def _serialize_image(self, image_info: ImageInfo, image_directory: Optional[Path] = None) -> Dict[str, Any]:
         """序列化图片信息"""
+        # 如果提供了图片目录，则保存相对路径，否则保存绝对路径（向后兼容）
+        if image_directory:
+            try:
+                # 计算相对于图片目录的相对路径
+                relative_path = image_info.path.relative_to(image_directory)
+                path_str = str(relative_path)
+            except ValueError:
+                # 如果无法计算相对路径，则使用绝对路径
+                path_str = str(image_info.path)
+        else:
+            path_str = str(image_info.path)
+        
         return {
-            "path": str(image_info.path),
+            "path": path_str,
             "orientation": image_info.orientation.value,
             "width": image_info.width,
             "height": image_info.height,
         }
-
-    def _deserialize_image(self, image_data: Dict[str, Any]) -> Optional[ImageInfo]:
+    def _deserialize_image(self, image_data: Dict[str, Any], image_directory: Optional[Path] = None) -> Optional[ImageInfo]:
         """反序列化图片信息"""
         try:
-            path = Path(image_data["path"])
+            path_str = image_data["path"]
+            path = Path(path_str)
+            
+            # 如果路径不是绝对路径且提供了图片目录，则构建绝对路径
+            if not path.is_absolute() and image_directory:
+                path = image_directory / path
+            
             orientation = ImageOrientation(image_data["orientation"])
             width = image_data["width"]
             height = image_data["height"]
