@@ -25,6 +25,7 @@ from grid_widget import GridWidget
 from image_list_widget import ImageListWidget
 from state_manager import StateManager
 from preview_window import PreviewWindow
+from puzzle_exporter import PuzzleExporter
 
 
 class ExportDialog(QDialog):
@@ -429,128 +430,10 @@ class MainWindow(QMainWindow):
                 except Exception as e:
                     QMessageBox.warning(self, "导出失败", f"导出时出错: {e}")
 
-    def _get_valid_area(self):
-        """计算有效区域（包含图片的区域）"""
-        min_row, max_row = None, None
-        min_col, max_col = None, None
-
-        for row in range(self.model.rows):
-            for col in range(self.model.cols):
-                cell = self.model.get_cell(row, col)
-                if cell and cell.is_occupied and cell.is_main_cell:
-                    # 更新边界
-                    if min_row is None or row < min_row:
-                        min_row = row
-                    if max_row is None or row > max_row:
-                        max_row = row
-                    if min_col is None or col < min_col:
-                        min_col = col
-                    if max_col is None or col > max_col:
-                        max_col = col
-
-                    # 对于竖屏图片，需要考虑它占用的额外行
-                    if (
-                        cell.image
-                        and cell.image.orientation == ImageOrientation.VERTICAL
-                    ):
-                        bottom_row = row + config.VERTICAL_IMAGE_SPAN - 1
-                        if max_row is None or bottom_row > max_row:
-                            max_row = bottom_row
-
-        # 如果没有找到图片，返回None
-        if min_row is None:
-            return None
-
-        return min_row, max_row, min_col, max_col
-
-    def _create_puzzle_image(self, cell_width: int, cell_height: int):
-        """创建拼图图片（统一的图片生成函数）"""
-        # 计算有效区域
-        valid_area = self._get_valid_area()
-        if valid_area is None:
-            raise ValueError("没有找到任何图片")
-
-        min_row, max_row, min_col, max_col = valid_area
-
-        # 计算有效区域的尺寸
-        valid_rows = max_row - min_row + 1
-        valid_cols = max_col - min_col + 1
-
-        # 计算间隔尺寸
-        spacing = config.calculate_spacing(cell_height)
-
-        # 计算有效区域的输出尺寸，考虑格子间的间隔
-        # 宽度：格子数 * 格子宽度 + (格子数-1) * 间隔
-        total_width = (
-            cell_width * valid_cols + spacing * (valid_cols - 1)
-            if valid_cols > 1
-            else cell_width * valid_cols
-        )
-        # 高度：格子数 * 格子高度 + (格子数-1) * 间隔
-        total_height = (
-            cell_height * valid_rows + spacing * (valid_rows - 1)
-            if valid_rows > 1
-            else cell_height * valid_rows
-        )
-
-        # 创建输出图片
-        output_pixmap = QPixmap(total_width, total_height)
-        output_pixmap.fill(Qt.white)
-
-        painter = QPainter(output_pixmap)
-        try:
-            # 只遍历有效区域
-            for row in range(min_row, max_row + 1):
-                for col in range(min_col, max_col + 1):
-                    cell = self.model.get_cell(row, col)
-
-                    if cell and cell.is_occupied and cell.image and cell.is_main_cell:
-                        # 计算相对于有效区域的位置
-                        relative_row = row - min_row
-                        relative_col = col - min_col
-
-                        # 计算目标位置，考虑间隔
-                        # x位置：列数 * (格子宽度 + 间隔)
-                        x = relative_col * (cell_width + spacing)
-                        # y位置：行数 * (格子高度 + 间隔)
-                        y = relative_row * (cell_height + spacing)
-
-                        # 计算目标尺寸
-                        if cell.image.orientation == ImageOrientation.VERTICAL:
-                            # 竖屏图片：宽度 = 1个格子宽度，高度 = 3个格子高度 + 2个间隔
-                            target_width = cell_width
-                            target_height = cell_height * 3 + spacing * 2
-                        else:
-                            # 横屏图片：标准1个格子
-                            target_width = cell_width
-                            target_height = cell_height
-
-                        # 加载并缩放图片
-                        source_pixmap = QPixmap(str(cell.image.path))
-                        if not source_pixmap.isNull():
-                            # 缩放图片到目标尺寸，保持宽高比
-                            scaled_pixmap = source_pixmap.scaled(
-                                target_width,
-                                target_height,
-                                Qt.KeepAspectRatio,
-                                Qt.SmoothTransformation,
-                            )
-
-                            # 居中绘制
-                            draw_x = x + (target_width - scaled_pixmap.width()) // 2
-                            draw_y = y + (target_height - scaled_pixmap.height()) // 2
-
-                            painter.drawPixmap(draw_x, draw_y, scaled_pixmap)
-
-        finally:
-            painter.end()
-
-        return output_pixmap
-
     def _export_puzzle_to_file(self, save_path: str, cell_width: int, cell_height: int):
         """导出拼图到文件"""
-        output_pixmap = self._create_puzzle_image(cell_width, cell_height)
-        output_pixmap.save(save_path)
+        exporter = PuzzleExporter(self.model)
+        exporter.export_to_file(save_path, cell_width, cell_height)
 
     def _clear_grid(self):
         """清空网格"""
@@ -604,6 +487,7 @@ class MainWindow(QMainWindow):
             self,
             "关于拼图工具",
             "拼图工具 v1.0\n\n"
+            "作者：孔昊旻\n\n"
             "功能特性:\n"
             "• 支持横屏和竖屏图片（16:9比例）\n"
             "• 可调整网格大小\n"
@@ -751,6 +635,8 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "预览失败", "网格中没有任何图片")
             return
 
-        # 显示预览窗口
+        # 创建并显示预览窗口
         preview_window = PreviewWindow(self.model, self)
         preview_window.show()
+        preview_window.raise_()  # 将窗口提到前台
+        preview_window.activateWindow()  # 激活窗口
