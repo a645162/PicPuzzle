@@ -16,10 +16,12 @@ from PySide6.QtWidgets import (
     QSpinBox,
 )
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QAction, QPixmap, QPainter
+from PySide6.QtGui import QAction
 from pathlib import Path
 from datetime import datetime
+
 import config
+
 from models import PuzzleModel, ImageInfo, ImageOrientation
 from grid_widget import GridWidget
 from image_list_widget import ImageListWidget

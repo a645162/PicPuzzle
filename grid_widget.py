@@ -2,6 +2,8 @@
 """
 网格组件
 """
+from typing import Optional
+
 from PySide6.QtWidgets import (
     QWidget,
     QGridLayout,
@@ -14,7 +16,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QPixmap, QPainter, QColor, QPen
-from typing import Optional
+
 import config
 from models import PuzzleModel, ImageInfo, ImageOrientation
 

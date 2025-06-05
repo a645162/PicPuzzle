@@ -9,11 +9,12 @@ from PySide6.QtWidgets import (
     QLabel,
     QPushButton,
     QScrollArea,
+    QCheckBox,
 )
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QPixmap, QPainter
+
 import config
-from models import PuzzleModel, ImageOrientation
+from models import PuzzleModel
 from puzzle_exporter import PuzzleExporter
 
 
@@ -53,6 +54,15 @@ class PreviewWindow(QDialog):
             "font-size: 12px; padding: 5px; background-color: #f0f0f0; border: 1px solid #ccc;"
         )
         layout.addWidget(self.info_label)
+
+        # 控制选项
+        control_layout = QHBoxLayout()
+        self.show_grid_checkbox = QCheckBox("显示网格")
+        self.show_grid_checkbox.setChecked(True)  # 默认显示网格
+        self.show_grid_checkbox.stateChanged.connect(self.update_preview)
+        control_layout.addWidget(self.show_grid_checkbox)
+        control_layout.addStretch()  # 添加弹簧使复选框左对齐
+        layout.addLayout(control_layout)
 
         # 滚动区域
         scroll_area = QScrollArea()
@@ -109,8 +119,12 @@ class PreviewWindow(QDialog):
                 else:
                     area_info = "无图片"
 
+                # 添加网格状态信息
+                grid_status = (
+                    "显示网格" if self.show_grid_checkbox.isChecked() else "隐藏网格"
+                )
                 self.info_label.setText(
-                    f"预览尺寸: {size.width()}x{size.height()} | {area_info}"
+                    f"预览尺寸: {size.width()}x{size.height()} | {area_info} | {grid_status}"
                 )
             else:
                 self.preview_label.setText("没有图片可预览")
@@ -125,7 +139,11 @@ class PreviewWindow(QDialog):
         cell_width = config.PREVIEW_CELL_WIDTH
         cell_height = config.PREVIEW_CELL_HEIGHT
 
-        # 使用导出器生成预览图片，启用网格线显示
+        # 根据复选框状态决定是否显示网格和背景色
+        show_grid = self.show_grid_checkbox.isChecked()
+        bg_color = Qt.lightGray if show_grid else Qt.white
+
+        # 使用导出器生成预览图片
         return self.exporter.create_puzzle_image(
-            cell_width, cell_height, bg_color=Qt.lightGray, draw_grid=True
+            cell_width, cell_height, bg_color=bg_color, draw_grid=show_grid
         )

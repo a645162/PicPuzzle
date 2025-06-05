@@ -7,7 +7,9 @@ import os
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, Optional, List
+
 import config
+
 from models import PuzzleModel, ImageInfo, ImageOrientation
 
 

@@ -4,8 +4,8 @@
 """
 import sys
 from pathlib import Path
+
 from PySide6.QtWidgets import QApplication
-from PySide6.QtCore import Qt
 
 # 添加项目根目录到Python路径
 project_root = Path(__file__).parent

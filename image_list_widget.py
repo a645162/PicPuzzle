@@ -2,6 +2,9 @@
 """
 图片列表组件
 """
+from pathlib import Path
+from typing import Optional
+
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -17,8 +20,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QPixmap, QIcon
-from pathlib import Path
-from typing import Optional
+
 from models import PuzzleModel, ImageInfo, ImageOrientation
 import config
 
