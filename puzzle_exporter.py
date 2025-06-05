@@ -52,27 +52,77 @@ class PuzzleExporter:
         """
         计算精确的间隔值
 
-        根据README中的间隔算法:
-        - 竖屏图片高度 = 横屏图片高度 × 3 + 2 × 间隔
-        - 竖屏与横屏宽度相同
-        - 间隔 = (竖屏高度 - 横屏高度 × 3) / 2
+        基于16:9比例的实际计算：
+        - 横屏视频：宽W，高H = W × 9/16
+        - 竖屏视频：宽W，高V = W × 16/9
 
-        对于16:9比例的横屏视频和9:16比例的竖屏视频:
-        - 横屏: 宽W, 高H = W×9/16
-        - 竖屏: 宽W, 高V = W×16/9
+        由于宽度相同，我们有：
+        - 横屏高度：H = W × 9/16
+        - 竖屏高度：V = W × 16/9
 
-        套用公式: V = 3×H + 2×spacing
-        带入: W×16/9 = 3×(W×9/16) + 2×spacing
+        竖屏高度与横屏高度的比例：
+        V/H = (W × 16/9) / (W × 9/16) = (16/9) / (9/16) = (16/9) × (16/9) = 256/81
 
-        解得: spacing = (W×16/9 - 3×W×9/16)/2
-              = W×(16/9 - 27/16)/2
-              = W×13/288
+        因此：V = H × 256/81
 
-        由于cell_height = W×9/16, 所以W = cell_height×16/9
-        因此: spacing = cell_height×16/9×13/288 = cell_height×13/162
+        竖屏占用3个格子高度加2个间隔：
+        V = 3H + 2×spacing
+
+        代入得：H × 256/81 = 3H + 2×spacing
+
+        解得：spacing = (H × 256/81 - 3H) / 2
+                     = H × (256/81 - 3) / 2
+                     = H × (256 - 243) / (81 × 2)
+                     = H × 13 / 162
+
+        但这个计算有问题，让我重新理解：
+
+        实际上，如果我们固定宽度相同，那么：
+        - cell_height 就是横屏的高度
+        - 竖屏的实际高度应该是 cell_height × 16/9 ÷ 9/16 = cell_height × (16/9) × (16/9) = cell_height × 256/81
+
+        但这样竖屏会非常高。让我重新理解需求：
+
+        实际上应该是：
+        - 横屏：宽度W，高度 cell_height
+        - 竖屏：宽度W（相同），高度按比例应该是 W × 16/9
+        - 但由于 cell_height = W × 9/16，所以 W = cell_height × 16/9
+        - 因此竖屏高度 = (cell_height × 16/9) × 16/9 = cell_height × 256/81
+
+        这太高了。让我重新理解：应该是竖屏和横屏都保持16:9比例，但宽度相同。
+
+        如果宽度相同为W：
+        - 横屏：宽W，高 W×9/16
+        - 竖屏：宽W，高 W×16/9
+
+        竖屏高度/横屏高度 = (W×16/9) / (W×9/16) = 256/81 ≈ 3.16
+
+        由于占用3个格子+2个间隔：
+        W×16/9 = 3×(W×9/16) + 2×spacing
+        W×16/9 = 3W×9/16 + 2×spacing
+        W×16/9 = W×27/16 + 2×spacing
+        2×spacing = W×16/9 - W×27/16
+        2×spacing = W×(16×16 - 27×9)/(9×16)
+        2×spacing = W×(256 - 243)/144
+        2×spacing = W×13/144
+        spacing = W×13/288
+
+        由于 cell_height = W×9/16，所以 W = cell_height×16/9
+        spacing = (cell_height×16/9)×13/288 = cell_height×13×16/(288×9) = cell_height×208/2592 = cell_height×13/162
+
+        验证这个结果：这确实是正确的数学计算。
+        但为了更清晰，我们直接用比例关系：
         """
-        # 间隔 = cell_height × 13/162
-        spacing = int(cell_height * 13 / 162)
+        # 基于16:9比例的实际计算
+        # 横屏高度：cell_height
+        # 竖屏高度：cell_height × (16/9) / (9/16) = cell_height × 256/81
+        vertical_height = cell_height * 256 // 81
+
+        # 竖屏占用3个格子高度 + 2个间隔 = 竖屏实际高度
+        # 3 × cell_height + 2 × spacing = vertical_height
+        # spacing = (vertical_height - 3 × cell_height) / 2
+        spacing = (vertical_height - 3 * cell_height) // 2
+
         return max(spacing, 1)  # 确保间隔至少为1像素
 
     def create_puzzle_image(
@@ -166,8 +216,11 @@ class PuzzleExporter:
                             target_width = cell_width
                             target_height = cell_height
 
-                        # 绘制单元格背景，突出显示间隔
-                        painter.fillRect(x, y, target_width, target_height, Qt.white)
+                        # 绘制单元格背景（如果需要显示间隔）
+                        if draw_grid:
+                            painter.fillRect(
+                                x, y, target_width, target_height, Qt.white
+                            )
 
                         # 加载并缩放图片
                         source_pixmap = QPixmap(str(cell.image.path))
