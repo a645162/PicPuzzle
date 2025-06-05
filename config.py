@@ -1,0 +1,42 @@
+# -*- coding: utf-8 -*-
+"""
+配置文件
+"""
+
+# 网格配置
+GRID_PREVIEW_WIDTH = 200
+GRID_PREVIEW_HEIGHT = GRID_PREVIEW_WIDTH * 9 // 16
+GRID_OUTPUT_WIDTH = 1920
+GRID_OUTPUT_HEIGHT = 1080
+
+# 竖屏图片占据的格子数（纵向）
+VERTICAL_IMAGE_SPAN = 3
+
+# 计算网格间隔
+# 竖屏视频高度 = 3 * 横屏视频高度 + 2 * 间隔
+# 间隔 = (竖屏视频高度 - 横屏视频高度 * 3) / 2
+# 预览间隔
+VERTICAL_PREVIEW_HEIGHT = GRID_PREVIEW_WIDTH * 9 // 16
+GRID_SPACING = (
+    VERTICAL_PREVIEW_HEIGHT - GRID_PREVIEW_HEIGHT * VERTICAL_IMAGE_SPAN
+) // 2
+
+# 输出间隔计算
+VERTICAL_OUTPUT_HEIGHT = GRID_OUTPUT_WIDTH * 9 // 16  # 1920 * 9 / 16 = 1080
+OUTPUT_SPACING = (
+    VERTICAL_OUTPUT_HEIGHT - GRID_OUTPUT_HEIGHT * VERTICAL_IMAGE_SPAN
+) // 2
+
+# 状态文件配置
+DATA_DIR = "data"
+STATE_FILE_EXTENSION = ".json"
+
+# 默认网格行列数
+DEFAULT_GRID_ROWS = 13
+DEFAULT_GRID_COLS = 10
+
+# 支持的图片格式
+SUPPORTED_IMAGE_FORMATS = [".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif"]
+
+# 图片比例（16:9）
+IMAGE_ASPECT_RATIO = 16 / 9
