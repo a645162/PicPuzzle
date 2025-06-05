@@ -421,30 +421,75 @@ class MainWindow(QMainWindow):
                     )
                 except Exception as e:
                     QMessageBox.warning(self, "导出失败", f"导出时出错: {e}")
+    def _get_valid_area(self):
+        """计算有效区域（包含图片的区域）"""
+        min_row, max_row = None, None
+        min_col, max_col = None, None
+        
+        for row in range(self.model.rows):
+            for col in range(self.model.cols):
+                cell = self.model.get_cell(row, col)
+                if cell and cell.is_occupied and cell.is_main_cell:
+                    # 更新边界
+                    if min_row is None or row < min_row:
+                        min_row = row
+                    if max_row is None or row > max_row:
+                        max_row = row
+                    if min_col is None or col < min_col:
+                        min_col = col
+                    if max_col is None or col > max_col:
+                        max_col = col
+                        
+                    # 对于竖屏图片，需要考虑它占用的额外行
+                    if cell.image and cell.image.orientation == ImageOrientation.VERTICAL:
+                        bottom_row = row + config.VERTICAL_IMAGE_SPAN - 1
+                        if max_row is None or bottom_row > max_row:
+                            max_row = bottom_row
+        
+        # 如果没有找到图片，返回None
+        if min_row is None:
+            return None
+            
+        return min_row, max_row, min_col, max_col
 
     def _create_puzzle_image(self, save_path: str, cell_width: int, cell_height: int):
         """创建拼图图片"""
+        # 计算有效区域
+        valid_area = self._get_valid_area()
+        if valid_area is None:
+            raise ValueError("没有找到任何图片")
+            
+        min_row, max_row, min_col, max_col = valid_area
+        
+        # 计算有效区域的尺寸
+        valid_rows = max_row - min_row + 1
+        valid_cols = max_col - min_col + 1
+        
         # 计算输出间隔（基于输出尺寸）
         output_spacing = (
             cell_width * 9 // 16 - cell_height * config.VERTICAL_IMAGE_SPAN
         ) // 2
 
-        # 计算总输出尺寸
-        total_width = cell_width * self.model.cols
-        total_height = cell_height * self.model.rows
+        # 计算有效区域的输出尺寸
+        total_width = cell_width * valid_cols
+        total_height = cell_height * valid_rows
 
         # 创建输出图片
         output_pixmap = QPixmap(total_width, total_height)
         output_pixmap.fill(Qt.white)
 
         painter = QPainter(output_pixmap)
-
         try:
-            for row in range(self.model.rows):
-                for col in range(self.model.cols):
+            # 只遍历有效区域
+            for row in range(min_row, max_row + 1):
+                for col in range(min_col, max_col + 1):
                     cell = self.model.get_cell(row, col)
 
                     if cell and cell.is_occupied and cell.image and cell.is_main_cell:
+                        # 计算相对于有效区域的位置
+                        relative_row = row - min_row
+                        relative_col = col - min_col
+                        
                         # 计算目标位置和尺寸
                         if cell.image.orientation == ImageOrientation.VERTICAL:
                             # 竖屏图片占3个格子的高度，但需要考虑间隔
@@ -453,14 +498,14 @@ class MainWindow(QMainWindow):
                                 cell_height * config.VERTICAL_IMAGE_SPAN
                                 + output_spacing * 2
                             )
-                            x = col * cell_width
-                            y = row * cell_height - output_spacing
+                            x = relative_col * cell_width
+                            y = relative_row * cell_height - output_spacing
                         else:
                             # 横屏图片占1个格子
                             target_width = cell_width
                             target_height = cell_height
-                            x = col * cell_width
-                            y = row * cell_height
+                            x = relative_col * cell_width
+                            y = relative_row * cell_height
 
                         # 加载并缩放图片
                         source_pixmap = QPixmap(str(cell.image.path))
