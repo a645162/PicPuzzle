@@ -4,28 +4,27 @@
 """
 
 # 网格配置
-GRID_PREVIEW_WIDTH = 200
-GRID_PREVIEW_HEIGHT = GRID_PREVIEW_WIDTH * 9 // 16
+# 预览配置
+PREVIEW_CELL_WIDTH = 160
+PREVIEW_CELL_HEIGHT = PREVIEW_CELL_WIDTH * 9 // 16  # 90
+
+# 输出配置
 GRID_OUTPUT_WIDTH = 1920
 GRID_OUTPUT_HEIGHT = 1080
 
 # 竖屏图片占据的格子数（纵向）
 VERTICAL_IMAGE_SPAN = 3
 
-# 计算网格间隔
-# 竖屏视频高度 = 3 * 横屏视频高度 + 2 * 间隔
-# 间隔 = (竖屏视频高度 - 横屏视频高度 * 3) / 2
-# 预览间隔
-VERTICAL_PREVIEW_HEIGHT = GRID_PREVIEW_WIDTH * 9 // 16
-GRID_SPACING = (
-    VERTICAL_PREVIEW_HEIGHT - GRID_PREVIEW_HEIGHT * VERTICAL_IMAGE_SPAN
-) // 2
 
-# 输出间隔计算
-VERTICAL_OUTPUT_HEIGHT = GRID_OUTPUT_WIDTH * 9 // 16  # 1920 * 9 / 16 = 1080
-OUTPUT_SPACING = (
-    VERTICAL_OUTPUT_HEIGHT - GRID_OUTPUT_HEIGHT * VERTICAL_IMAGE_SPAN
-) // 2
+# 计算间隔 - 预览和输出都使用动态计算
+def calculate_spacing(cell_height: int) -> int:
+    """计算格子间距，确保3个横屏图片的高度等于1个竖屏图片的高度"""
+    vertical_height = cell_height * VERTICAL_IMAGE_SPAN
+    horizontal_height = cell_height
+    # 3个横屏 + 2个间隔 = 1个竖屏
+    # spacing = (vertical_height - 3 * horizontal_height) / 2
+    return max(0, (vertical_height - 3 * horizontal_height) // 2)
+
 
 # 状态文件配置
 DATA_DIR = "data"

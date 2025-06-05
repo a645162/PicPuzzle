@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QHBoxLayout,
     QScrollArea,
+    QSpinBox,
 )
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QPixmap, QPainter, QColor, QPen
@@ -27,7 +28,7 @@ class GridCellWidget(QLabel):
         super().__init__(parent)
         self.row = row
         self.col = col
-        self.setFixedSize(config.GRID_PREVIEW_WIDTH, config.GRID_PREVIEW_HEIGHT)
+        self.setFixedSize(config.PREVIEW_CELL_WIDTH, config.PREVIEW_CELL_HEIGHT)
         self.setStyleSheet(
             """
             QLabel {
@@ -62,10 +63,11 @@ class GridCellWidget(QLabel):
                 if image_info.orientation == ImageOrientation.VERTICAL:
                     if is_main_cell:
                         # 竖屏图片的主单元格，显示完整图片
-                        # 计算竖屏图片应有的高度
-                        vertical_height = config.VERTICAL_PREVIEW_HEIGHT
+                        # 计算竖屏图片应有的高度 (3个格子高度 + 2个间隔)
+                        spacing = config.calculate_spacing(config.PREVIEW_CELL_HEIGHT)
+                        vertical_height = config.PREVIEW_CELL_HEIGHT * 3 + spacing * 2
                         scaled_pixmap = pixmap.scaled(
-                            config.GRID_PREVIEW_WIDTH,
+                            config.PREVIEW_CELL_WIDTH,
                             vertical_height,
                             Qt.KeepAspectRatio,
                             Qt.SmoothTransformation,
@@ -126,13 +128,15 @@ class GridCellWidget(QLabel):
         )
 
     def _create_placeholder_pixmap(self) -> QPixmap:
-        """创建占位符图片"""
+        """创建占位图片"""
         pixmap = QPixmap(self.size())
-        pixmap.fill(QColor(255, 224, 224))
+        pixmap.fill(QColor(255, 235, 235))
 
         painter = QPainter(pixmap)
         painter.setPen(QPen(QColor(255, 107, 107), 2))
-        painter.drawText(pixmap.rect(), Qt.AlignCenter, "竖屏占位")
+        painter.drawText(
+            pixmap.rect(), Qt.AlignCenter, f"占位\n({self.row},{self.col})"
+        )
         painter.end()
 
         return pixmap
@@ -159,16 +163,14 @@ class GridWidget(QWidget):
         control_panel = QHBoxLayout()
 
         # 网格大小控制
-        from PySide6.QtWidgets import QSpinBox, QLabel as QStaticLabel
-
-        control_panel.addWidget(QStaticLabel("行数:"))
+        control_panel.addWidget(QLabel("行数:"))
         self.rows_spinbox = QSpinBox()
         self.rows_spinbox.setRange(1, 20)
         self.rows_spinbox.setValue(self.model.rows)
         self.rows_spinbox.valueChanged.connect(self._on_grid_size_changed)
         control_panel.addWidget(self.rows_spinbox)
 
-        control_panel.addWidget(QStaticLabel("列数:"))
+        control_panel.addWidget(QLabel("列数:"))
         self.cols_spinbox = QSpinBox()
         self.cols_spinbox.setRange(1, 20)
         self.cols_spinbox.setValue(self.model.cols)
@@ -217,13 +219,15 @@ class GridWidget(QWidget):
                 child = self.grid_layout.takeAt(0)
                 if child.widget():
                     child.widget().deleteLater()
-            self.grid_container.layout().deleteLater()
+            if self.grid_container.layout():
+                self.grid_container.layout().deleteLater()
+
         # 创建新的网格布局
         self.grid_layout = QGridLayout(self.grid_container)
 
-        # 设置网格间隔
-        # 根据竖屏和横屏视频的尺寸关系计算间隔
-        self.grid_layout.setSpacing(config.GRID_SPACING)
+        # 设置网格间隔 - 使用动态计算的间隔
+        spacing = config.calculate_spacing(config.PREVIEW_CELL_HEIGHT)
+        self.grid_layout.setSpacing(spacing)
 
         self.cells = []
 

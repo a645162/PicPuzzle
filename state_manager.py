@@ -44,12 +44,10 @@ class StateManager:
             "grid_config": {
                 "rows": model.rows,
                 "cols": model.cols,
-                "preview_width": config.GRID_PREVIEW_WIDTH,
-                "preview_height": config.GRID_PREVIEW_HEIGHT,
+                "preview_width": config.PREVIEW_CELL_WIDTH,
+                "preview_height": config.PREVIEW_CELL_HEIGHT,
                 "output_width": config.GRID_OUTPUT_WIDTH,
                 "output_height": config.GRID_OUTPUT_HEIGHT,
-                "spacing": config.GRID_SPACING,
-                "output_spacing": config.OUTPUT_SPACING,
             },
             "images": {
                 "unused": [
