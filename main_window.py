@@ -103,6 +103,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.model = PuzzleModel(config.DEFAULT_GRID_ROWS, config.DEFAULT_GRID_COLS)
         self.state_manager = StateManager()
+        self.is_modified = False  # 添加修改状态标记
         self.setup_ui()
         self.setup_menu()
         self.setup_status_bar()
@@ -112,6 +113,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("拼图工具")
         self.setMinimumSize(1200, 800)
         self.resize(1600, 1000)
+        self.update_window_title()  # 初始化窗口标题
 
     def setup_ui(self):
         """设置界面"""
@@ -222,25 +224,110 @@ class MainWindow(QMainWindow):
         self.status_timer.timeout.connect(self.update_status)
         self.status_timer.start(1000)  # 每秒更新一次
 
+    def set_modified(self, modified: bool = True):
+        """设置修改状态"""
+        if self.is_modified != modified:
+            self.is_modified = modified
+            self.update_window_title()
+
+    def update_window_title(self):
+        """更新窗口标题"""
+        title = "拼图工具"
+        if self.is_modified:
+            title += " *"
+        self.setWindowTitle(title)
+
+    def closeEvent(self, event):
+        """重写关闭事件"""
+        if self.is_modified:
+            tip_str = str(
+                "当前有未保存的修改，确定要退出吗？\n\n"
+                '点击"是"直接退出\n点击"否"取消退出\n'
+                '点击"Save"保存后退出'
+            )
+
+            reply = QMessageBox.question(
+                self,
+                "确认退出",
+                tip_str,
+                QMessageBox.Yes | QMessageBox.No | QMessageBox.Save,
+                QMessageBox.Save,
+            )
+
+            if reply == QMessageBox.Save:
+                # 保存状态
+                self._save_state()
+                # 如果保存成功（修改状态被清除），则退出
+                if not self.is_modified:
+                    event.accept()
+                else:
+                    event.ignore()
+            elif reply == QMessageBox.Yes:
+                event.accept()
+            else:
+                event.ignore()
+        else:
+            event.accept()
+
     def _on_cell_clicked(self, row: int, col: int):
         """处理网格点击"""
         cell = self.model.get_cell(row, col)
 
         if cell and cell.is_occupied:
-            # 如果格子已被占用，移除图片
-            image = self.grid_widget.remove_image_at(row, col)
-            if image:
-                self.image_list_widget.update_lists()
-                self.status_bar.showMessage(f"已移除图片: {image.path.name}")
+            # 如果格子已被占用，询问是否移除图片
+            reply = QMessageBox.question(
+                self,
+                "确认移除",
+                f"确定要移除位置 ({row+1}, {col+1}) 的图片吗？",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+
+            if reply == QMessageBox.Yes:
+                image = self.grid_widget.remove_image_at(row, col)
+                if image:
+                    self.image_list_widget.update_lists()
+                    self.status_bar.showMessage(f"已移除图片: {image.path.name}")
+                    self.set_modified(True)  # 标记为已修改
         else:
             # 如果格子空闲，尝试放置选中的图片
             selected_image = self.image_list_widget.get_selected_image()
             if selected_image:
+                # 检查是否会替换现有图片（对于竖屏图片）
+                will_replace = False
+                replaced_images = []
+
+                if selected_image.orientation == ImageOrientation.VERTICAL:
+                    # 检查竖屏图片占用的所有格子
+                    for r in range(
+                        row, min(row + config.VERTICAL_IMAGE_SPAN, self.model.rows)
+                    ):
+                        check_cell = self.model.get_cell(r, col)
+                        if check_cell and check_cell.is_occupied and check_cell.image:
+                            will_replace = True
+                            if check_cell.image not in replaced_images:
+                                replaced_images.append(check_cell.image)
+
+                # 如果会替换现有图片，询问确认
+                if will_replace:
+                    image_names = [img.path.name for img in replaced_images]
+                    reply = QMessageBox.question(
+                        self,
+                        "确认替换",
+                        f"放置此图片将替换以下图片：\n{', '.join(image_names)}\n\n确定要继续吗？",
+                        QMessageBox.Yes | QMessageBox.No,
+                        QMessageBox.No,
+                    )
+
+                    if reply != QMessageBox.Yes:
+                        return
+
                 if self.grid_widget.place_image_at(row, col, selected_image):
                     self.image_list_widget.update_lists()
                     self.status_bar.showMessage(
                         f"已放置图片: {selected_image.path.name}"
                     )
+                    self.set_modified(True)  # 标记为已修改
                 else:
                     # 检查失败原因
                     if selected_image.orientation == ImageOrientation.VERTICAL:
@@ -279,6 +366,9 @@ class MainWindow(QMainWindow):
                 count = self.model.load_images_from_directory(Path(directory))
                 self.image_list_widget.update_lists()
                 self.status_bar.showMessage(f"成功加载 {count} 张图片")
+
+                if count > 0:
+                    self.set_modified(True)  # 标记为已修改
 
                 if count == 0:
                     QMessageBox.information(
@@ -412,6 +502,7 @@ class MainWindow(QMainWindow):
             self.grid_widget.refresh_display()
             self.image_list_widget.update_lists()
             self.status_bar.showMessage("网格已清空")
+            self.set_modified(True)  # 标记为已修改
 
     def _clear_images(self):
         """清空图片列表"""
@@ -437,6 +528,7 @@ class MainWindow(QMainWindow):
             self.image_list_widget.update_lists()
             self.image_list_widget._clear_selection()
             self.status_bar.showMessage("所有图片已清空")
+            self.set_modified(True)  # 标记为已修改
 
     def _show_about(self):
         """显示关于对话框"""
@@ -481,6 +573,7 @@ class MainWindow(QMainWindow):
                 filename = self.state_manager.save_state(self.model, save_path)
                 QMessageBox.information(self, "保存成功", f"状态已保存到: {filename}")
                 self.status_bar.showMessage("状态保存成功")
+                self.set_modified(False)  # 清除修改状态
         except Exception as e:
             QMessageBox.warning(self, "保存失败", f"保存状态时出错: {e}")
 
@@ -490,7 +583,7 @@ class MainWindow(QMainWindow):
             current_py_dir = Path(__file__).parent
 
             default_dir = current_py_dir / "data"
-            
+
             if not default_dir.exists():
                 # 选择状态文件
                 load_path, _ = QFileDialog.getOpenFileName(
@@ -510,10 +603,14 @@ class MainWindow(QMainWindow):
 
             if load_path:
                 # 确认加载
+                warning_text = "加载状态将清空当前的网格和图片列表，确定要继续吗？"
+                if self.is_modified:
+                    warning_text = "当前有未保存的修改！\n" + warning_text
+
                 reply = QMessageBox.question(
                     self,
                     "确认加载",
-                    "加载状态将清空当前的网格和图片列表，确定要继续吗？",
+                    warning_text,
                     QMessageBox.Yes | QMessageBox.No,
                     QMessageBox.No,
                 )
@@ -534,6 +631,7 @@ class MainWindow(QMainWindow):
                                 self, "加载成功", f"状态已从 {load_path} 加载"
                             )
                             self.status_bar.showMessage("状态加载成功")
+                            self.set_modified(False)  # 清除修改状态
                         else:
                             QMessageBox.warning(
                                 self, "加载失败", "应用状态到模型时失败"

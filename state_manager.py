@@ -7,7 +7,6 @@ import os
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, Optional, List
-from dataclasses import asdict
 import config
 from models import PuzzleModel, ImageInfo, ImageOrientation
 
@@ -39,7 +38,9 @@ class StateManager:
         state_data = {
             "version": "1.0",
             "timestamp": datetime.now().isoformat(),
-            "image_directory": str(model.image_directory) if model.image_directory else None,
+            "image_directory": (
+                str(model.image_directory) if model.image_directory else None
+            ),
             "grid_config": {
                 "rows": model.rows,
                 "cols": model.cols,
@@ -51,8 +52,14 @@ class StateManager:
                 "output_spacing": config.OUTPUT_SPACING,
             },
             "images": {
-                "unused": [self._serialize_image(img, model.image_directory) for img in model.unused_images],
-                "used": [self._serialize_image(img, model.image_directory) for img in model.used_images],
+                "unused": [
+                    self._serialize_image(img, model.image_directory)
+                    for img in model.unused_images
+                ],
+                "used": [
+                    self._serialize_image(img, model.image_directory)
+                    for img in model.used_images
+                ],
             },
             "grid_layout": [],
         }
@@ -66,7 +73,9 @@ class StateManager:
                     cell_data = {
                         "row": row,
                         "col": col,
-                        "image": self._serialize_image(cell.image),
+                        "image": self._serialize_image(
+                            cell.image, model.image_directory
+                        ),
                         "is_main_cell": True,
                     }
                     grid_row.append(cell_data)
@@ -102,6 +111,14 @@ class StateManager:
 
             model.resize_grid(rows, cols)
 
+            # 获取图片目录
+            image_directory_str = state_data.get("image_directory")
+            image_directory = Path(image_directory_str) if image_directory_str else None
+
+            # 设置模型的图片目录
+            if image_directory:
+                model.image_directory = image_directory
+
             # 加载图片列表
             images_data = state_data.get("images", {})
 
@@ -111,13 +128,13 @@ class StateManager:
 
             # 加载未使用图片
             for img_data in images_data.get("unused", []):
-                image_info = self._deserialize_image(img_data)
+                image_info = self._deserialize_image(img_data, image_directory)
                 if image_info and image_info.path.exists():
                     model.unused_images.append(image_info)
 
             # 加载已使用图片
             for img_data in images_data.get("used", []):
-                image_info = self._deserialize_image(img_data)
+                image_info = self._deserialize_image(img_data, image_directory)
                 if image_info and image_info.path.exists():
                     model.used_images.append(image_info)
 
@@ -132,7 +149,9 @@ class StateManager:
 
                     image_data = cell_data.get("image")
                     if image_data:
-                        image_info = self._deserialize_image(image_data)
+                        image_info = self._deserialize_image(
+                            image_data, image_directory
+                        )
                         if image_info and image_info.path.exists():
                             # 确保图片在已使用列表中
                             if image_info not in model.used_images:
@@ -149,7 +168,9 @@ class StateManager:
             print(f"应用状态到模型失败: {e}")
             return False
 
-    def _serialize_image(self, image_info: ImageInfo, image_directory: Optional[Path] = None) -> Dict[str, Any]:
+    def _serialize_image(
+        self, image_info: ImageInfo, image_directory: Optional[Path] = None
+    ) -> Dict[str, Any]:
         """序列化图片信息"""
         # 如果提供了图片目录，则保存相对路径，否则保存绝对路径（向后兼容）
         if image_directory:
@@ -162,23 +183,26 @@ class StateManager:
                 path_str = str(image_info.path)
         else:
             path_str = str(image_info.path)
-        
+
         return {
             "path": path_str,
             "orientation": image_info.orientation.value,
             "width": image_info.width,
             "height": image_info.height,
         }
-    def _deserialize_image(self, image_data: Dict[str, Any], image_directory: Optional[Path] = None) -> Optional[ImageInfo]:
+
+    def _deserialize_image(
+        self, image_data: Dict[str, Any], image_directory: Optional[Path] = None
+    ) -> Optional[ImageInfo]:
         """反序列化图片信息"""
         try:
             path_str = image_data["path"]
             path = Path(path_str)
-            
+
             # 如果路径不是绝对路径且提供了图片目录，则构建绝对路径
             if not path.is_absolute() and image_directory:
                 path = image_directory / path
-            
+
             orientation = ImageOrientation(image_data["orientation"])
             width = image_data["width"]
             height = image_data["height"]
