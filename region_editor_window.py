@@ -10,12 +10,14 @@ from PySide6.QtWidgets import (
     QLabel,
     QSpinBox,
     QMessageBox,
+    QWidget,
 )
 from PySide6.QtCore import Qt, QRect
 
 import config
 from models import PuzzleModel, ImageOrientation
 from grid_preview_widget import GridPreviewWidget
+from direction_grid_widget import DirectionGridWidget
 
 # ========== 常量配置 ==========
 
@@ -80,65 +82,99 @@ class RegionEditorWindow(QDialog):
         """设置界面"""
         layout = QVBoxLayout(self)
 
-        # 控制面板
+        # 控制面板 - 压缩高度
         control_layout = QHBoxLayout()
+        control_layout.setSpacing(8)  # 适当的间距
 
-        # 移动方向按钮
-        move_layout = QVBoxLayout()
+        # 九宫格方向控制 - 替代原来的移动按钮
+        self.direction_grid = DirectionGridWidget()
 
-        move_up_button = QPushButton("↑ 上移")
+        # 创建方向按钮
+        move_up_button = QPushButton("↑")
+        move_up_button.setToolTip("向上移动")
         move_up_button.clicked.connect(self._move_up)
-        move_layout.addWidget(move_up_button)
+        self.direction_grid.set_top_button(move_up_button)
 
-        move_row_layout = QHBoxLayout()
-        move_left_button = QPushButton("← 左移")
-        move_left_button.clicked.connect(self._move_left)
-        move_row_layout.addWidget(move_left_button)
-        move_right_button = QPushButton("→ 右移")
-        move_right_button.clicked.connect(self._move_right)
-        move_row_layout.addWidget(move_right_button)
-        move_layout.addLayout(move_row_layout)
-
-        move_down_button = QPushButton("↓ 下移")
+        move_down_button = QPushButton("↓")
+        move_down_button.setToolTip("向下移动")
         move_down_button.clicked.connect(self._move_down)
-        move_layout.addWidget(move_down_button)
+        self.direction_grid.set_bottom_button(move_down_button)
 
-        control_layout.addLayout(move_layout)
+        move_left_button = QPushButton("←")
+        move_left_button.setToolTip("向左移动")
+        move_left_button.clicked.connect(self._move_left)
+        self.direction_grid.set_left_button(move_left_button)
 
-        # 区域设置
+        move_right_button = QPushButton("→")
+        move_right_button.setToolTip("向右移动")
+        move_right_button.clicked.connect(self._move_right)
+        self.direction_grid.set_right_button(move_right_button)
+
+        # 清空按钮放在中心
+        clear_button = QPushButton("清空")
+        clear_button.setToolTip("清空选中区域")
+        clear_button.clicked.connect(self._clear_region)
+        self.direction_grid.set_center_button(clear_button)
+
+        # 设置九宫格的固定大小
+        # self.direction_grid.setFixedSize(150, 120)  # 移除固定尺寸
+        control_layout.addWidget(self.direction_grid)
+
+        # 区域设置 - 更紧凑
         area_layout = QVBoxLayout()
-        area_layout.addWidget(QLabel("选择区域:"))
+        area_layout.setSpacing(3)
+
+        area_label = QLabel("选择区域:")
+        area_label.setMaximumHeight(20)
+        area_layout.addWidget(area_label)
 
         row_col_layout = QHBoxLayout()
+        row_col_layout.setSpacing(5)
 
-        # 起始行
+        # 起始行 - 紧凑布局
         start_row_layout = QVBoxLayout()
-        start_row_layout.addWidget(QLabel("起始行"))
+        start_row_layout.setSpacing(2)
+        start_row_label = QLabel("起始行")
+        start_row_label.setMaximumHeight(15)
+        start_row_layout.addWidget(start_row_label)
         self.start_row_spinbox = QSpinBox()
+        self.start_row_spinbox.setFixedHeight(25)
         self.start_row_spinbox.setRange(0, self.model.rows - 1)
         self.start_row_spinbox.valueChanged.connect(self._update_selected_area)
         start_row_layout.addWidget(self.start_row_spinbox)
 
-        # 起始列
+        # 起始列 - 紧凑布局
         start_col_layout = QVBoxLayout()
-        start_col_layout.addWidget(QLabel("起始列"))
+        start_col_layout.setSpacing(2)
+        start_col_label = QLabel("起始列")
+        start_col_label.setMaximumHeight(15)
+        start_col_layout.addWidget(start_col_label)
         self.start_col_spinbox = QSpinBox()
+        self.start_col_spinbox.setFixedHeight(25)
         self.start_col_spinbox.setRange(0, self.model.cols - 1)
         self.start_col_spinbox.valueChanged.connect(self._update_selected_area)
         start_col_layout.addWidget(self.start_col_spinbox)
 
-        # 行数
+        # 行数 - 紧凑布局
         rows_layout = QVBoxLayout()
-        rows_layout.addWidget(QLabel("行数"))
+        rows_layout.setSpacing(2)
+        rows_label = QLabel("行数")
+        rows_label.setMaximumHeight(15)
+        rows_layout.addWidget(rows_label)
         self.rows_spinbox = QSpinBox()
+        self.rows_spinbox.setFixedHeight(25)
         self.rows_spinbox.setRange(1, self.model.rows)
         self.rows_spinbox.valueChanged.connect(self._update_selected_area)
         rows_layout.addWidget(self.rows_spinbox)
 
-        # 列数
+        # 列数 - 紧凑布局
         cols_layout = QVBoxLayout()
-        cols_layout.addWidget(QLabel("列数"))
+        cols_layout.setSpacing(2)
+        cols_label = QLabel("列数")
+        cols_label.setMaximumHeight(15)
+        cols_layout.addWidget(cols_label)
         self.cols_spinbox = QSpinBox()
+        self.cols_spinbox.setFixedHeight(25)
         self.cols_spinbox.setRange(1, self.model.cols)
         self.cols_spinbox.valueChanged.connect(self._update_selected_area)
         cols_layout.addWidget(self.cols_spinbox)
@@ -151,81 +187,93 @@ class RegionEditorWindow(QDialog):
 
         control_layout.addLayout(area_layout)
 
-        # 添加弹簧使按钮右对齐
-        control_layout.addStretch()
-
-        layout.addLayout(control_layout)
-
-        # 预览区域
-        preview_layout = QHBoxLayout()
-
-        # 网格预览
-        self.grid_preview = GridPreviewWidget(self.model)
-        self.grid_preview.area_selected.connect(self._on_area_selected)
-        self.grid_preview.area_drag_selected.connect(self._on_area_drag_selected)
-        preview_layout.addWidget(self.grid_preview, 1)
-
-        # 按钮
-        button_layout = QHBoxLayout()
-
-        # 预设区域按钮
+        # 快速选择按钮 - 紧凑布局
         preset_layout = QVBoxLayout()
-        preset_layout.addWidget(QLabel("快速选择:"))
+        preset_layout.setSpacing(3)
+        preset_label = QLabel("快速选择:")
+        preset_label.setMaximumHeight(20)
+        preset_layout.addWidget(preset_label)
 
         preset_button_layout = QHBoxLayout()
+        preset_button_layout.setSpacing(3)
 
-        full_grid_button = QPushButton("全部网格")
+        full_grid_button = QPushButton("全部")
+        full_grid_button.setFixedHeight(25)
         full_grid_button.clicked.connect(self._select_full_grid)
         preset_button_layout.addWidget(full_grid_button)
 
-        single_row_button = QPushButton("单行")
+        single_row_button = QPushButton("行")
+        single_row_button.setFixedHeight(25)
         single_row_button.clicked.connect(self._select_single_row)
         preset_button_layout.addWidget(single_row_button)
 
-        single_col_button = QPushButton("单列")
+        single_col_button = QPushButton("列")
+        single_col_button.setFixedHeight(25)
         single_col_button.clicked.connect(self._select_single_col)
         preset_button_layout.addWidget(single_col_button)
 
         preset_layout.addLayout(preset_button_layout)
-        button_layout.addLayout(preset_layout)
+        control_layout.addLayout(preset_layout)
 
-        button_layout.addStretch()
+        # 添加弹簧使控件居中对齐
+        control_layout.addStretch()
+
+        # 设置控制面板的最大高度
+        control_widget = QWidget()
+        control_widget.setLayout(control_layout)
+        control_widget.setMaximumHeight(120)  # 稍微增加高度以适应九宫格
+        layout.addWidget(control_widget)
+
+        # 预览区域和按钮 - 主要占用空间
+        main_content_layout = QHBoxLayout()
+
+        # 网格预览 - 占用大部分空间
+        self.grid_preview = GridPreviewWidget(self.model)
+        self.grid_preview.area_selected.connect(self._on_area_selected)
+        self.grid_preview.area_drag_selected.connect(self._on_area_drag_selected)
+        main_content_layout.addWidget(self.grid_preview, 5)  # 权重5，占大部分空间
+
+        # 右侧按钮区域 - 紧凑布局
+        button_layout = QVBoxLayout()
+        button_layout.setSpacing(5)
 
         auto_expand_button = QPushButton("智能扩展")
-        auto_expand_button.setFixedHeight(35)
+        auto_expand_button.setFixedHeight(30)
         auto_expand_button.clicked.connect(self._auto_expand_for_vertical_images)
         button_layout.addWidget(auto_expand_button)
 
         refresh_button = QPushButton("刷新预览")
-        refresh_button.setFixedHeight(35)
+        refresh_button.setFixedHeight(30)
         refresh_button.clicked.connect(self.update_preview)
         button_layout.addWidget(refresh_button)
 
-        clear_button = QPushButton("清空区域")
-        clear_button.setFixedHeight(35)
-        clear_button.clicked.connect(self._clear_region)
-        button_layout.addWidget(clear_button)
-
         close_button = QPushButton("关闭")
-        close_button.setFixedHeight(35)
+        close_button.setFixedHeight(30)
         close_button.clicked.connect(self.close)
         button_layout.addWidget(close_button)
 
-        layout.addLayout(preview_layout)
-        layout.addLayout(button_layout)
+        # 添加垂直弹簧，让按钮靠上排列
+        button_layout.addStretch()
 
-        # 添加状态栏
+        # 按钮区域控件
+        button_widget = QWidget()
+        button_widget.setLayout(button_layout)
+        button_widget.setMaximumWidth(120)  # 限制按钮区域宽度
+        main_content_layout.addWidget(button_widget, 0)  # 权重0，最小空间
+
+        layout.addLayout(main_content_layout, 1)  # 权重1，占用主要空间
+
+        # 添加状态栏 - 固定高度
         self.status_label = QLabel("请选择一个区域")
         self.status_label.setStyleSheet(
             "QLabel { padding: 5px; border-top: 1px solid #ccc; }"
         )
+        self.status_label.setMaximumHeight(30)  # 限制状态栏高度
         layout.addWidget(self.status_label)
 
-        # 设置布局边距
-        layout.setContentsMargins(
-            LAYOUT_MARGIN, LAYOUT_MARGIN, LAYOUT_MARGIN, LAYOUT_MARGIN
-        )
-        layout.setSpacing(LAYOUT_SPACING)
+        # 设置主布局边距和间距
+        layout.setContentsMargins(5, 5, 5, 5)  # 减少边距
+        layout.setSpacing(5)  # 减少间距
 
     def update_preview(self):
         """更新预览"""
