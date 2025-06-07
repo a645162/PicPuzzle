@@ -248,6 +248,10 @@ class RegionEditorWindow(QDialog):
         end_row = current_rect.top() + current_rect.height()
         end_col = current_rect.left() + current_rect.width()
 
+        print(f"DEBUG _update_status: current_rect = {current_rect}")
+        print(f"DEBUG _update_status: start_row={start_row}, start_col={start_col}, end_row={end_row}, end_col={end_col}")
+        print(f"DEBUG _update_status: width={current_rect.width()}, height={current_rect.height()}")
+
         # 获取图片统计信息
         vertical_images = self.get_vertical_images_in_region(current_rect)
         horizontal_images = self.get_horizontal_images_in_region(current_rect)
@@ -259,9 +263,8 @@ class RegionEditorWindow(QDialog):
                     occupied_count += 1
 
         status_text = (
-            f"选中区域: ({start_row}, {start_col}) - "
-            f"({end_row-1}, {end_col-1}) | "
-            f"大小: {current_rect.width()}x{current_rect.height()} | "
+            f"选中区域: 行({start_row}-{end_row-1}) 列({start_col}-{end_col-1}) | "
+            f"大小: {current_rect.height()}行x{current_rect.width()}列 | "
             f"已占用: {occupied_count}/{total_cells} 格子 | "
             f"横屏: {len(horizontal_images)} 竖屏: {len(vertical_images)}"
         )
@@ -274,14 +277,22 @@ class RegionEditorWindow(QDialog):
         rows = self.rows_spinbox.value()
         cols = self.cols_spinbox.value()
 
+        print(f"DEBUG _update_selected_area: start_row={start_row}, start_col={start_col}, rows={rows}, cols={cols}")
+
         # 确保区域不超过网格范围
         end_row = min(start_row + rows, self.model.rows)
         end_col = min(start_col + cols, self.model.cols)
+
+        print(f"DEBUG _update_selected_area: end_row={end_row}, end_col={end_col}")
+        print(f"DEBUG _update_selected_area: calculated width={end_col - start_col}, height={end_row - start_row}")
 
         # QRect(left, top, width, height) -> QRect(col, row, width, height)
         selected_rect = QRect(
             start_col, start_row, end_col - start_col, end_row - start_row
         )
+        
+        print(f"DEBUG _update_selected_area: created QRect = {selected_rect}")
+        
         self.grid_preview.set_selected_area(selected_rect)
         self._update_status()
 
@@ -371,6 +382,10 @@ class RegionEditorWindow(QDialog):
 
     def _update_spinboxes_from_rect(self, rect: QRect):
         """根据矩形更新数值框"""
+        print(f"DEBUG _update_spinboxes_from_rect: input rect = {rect}")
+        print(f"DEBUG _update_spinboxes_from_rect: setting start_row={rect.top()}, start_col={rect.left()}")
+        print(f"DEBUG _update_spinboxes_from_rect: setting rows={rect.height()}, cols={rect.width()}")
+        
         self.start_row_spinbox.setValue(rect.top())
         self.start_col_spinbox.setValue(rect.left())
         self.rows_spinbox.setValue(rect.height())
@@ -642,12 +657,14 @@ class RegionEditorWindow(QDialog):
 
         print(f"最终边界: top={new_top}, bottom={new_bottom}, left={new_left}, right={new_right}")
 
-        # 创建新的矩形
-        new_rect = QRect(new_left, new_top, new_right - new_left, new_bottom - new_top)
+        # 创建新的矩形 - 修复：保持原始的左右边界，只扩展上下
+        new_width = current_rect.width()  # 保持原始宽度
+        new_height = new_bottom - new_top  # 计算新高度
+        new_rect = QRect(current_rect.left(), new_top, new_width, new_height)
 
-        print(f"扩展结果:")
-        print(f"  原始区域大小: {current_rect.width()}x{current_rect.height()}")
-        print(f"  扩展后区域大小: {new_rect.width()}x{new_rect.height()}")
+        print("扩展结果:")
+        print(f"  原始区域大小: {current_rect.width()}列x{current_rect.height()}行")
+        print(f"  扩展后区域大小: {new_rect.width()}列x{new_rect.height()}行")
         print(f"  扩展详情: {'; '.join(expansion_details)}")
 
         # 计算扩展后新增的格子数
@@ -668,7 +685,7 @@ class RegionEditorWindow(QDialog):
                 self,
                 "扩展完成",
                 f"已扩展区域以包含 {len(vertical_images)} 个完整的竖屏图片\n"
-                f"区域大小: {current_rect.width()}x{current_rect.height()} -> {new_rect.width()}x{new_rect.height()}\n"
+                f"区域大小: {current_rect.width()}列x{current_rect.height()}行 -> {new_rect.width()}列x{new_rect.height()}行\n"
                 f"新增格子: {added_cells} 个",
             )
 
