@@ -127,7 +127,12 @@ class PuzzleExporter:
         return max(spacing, 1)  # 确保间隔至少为1像素
 
     def create_puzzle_image(
-        self, cell_width: int, cell_height: int, bg_color=Qt.white, draw_grid=False
+        self,
+        cell_width: int,
+        cell_height: int,
+        bg_color=Qt.white,
+        draw_grid=False,
+        custom_spacing=None,
     ):
         """
         创建拼图图片
@@ -137,6 +142,7 @@ class PuzzleExporter:
             cell_height: 单元格高度
             bg_color: 背景颜色，默认为白色
             draw_grid: 是否绘制网格线，突出显示间隔
+            custom_spacing: 自定义间隔，如果为None则自动计算
         """
         # 计算有效区域
         valid_area = self.get_valid_area()
@@ -149,11 +155,14 @@ class PuzzleExporter:
         valid_rows = max_row - min_row + 1
         valid_cols = max_col - min_col + 1
 
-        # 计算精确的间隔尺寸
-        spacing = self.calculate_spacing(cell_height)
+        # 计算间隔尺寸
+        if custom_spacing is not None:
+            spacing = custom_spacing
+        else:
+            spacing = self.calculate_spacing(cell_height)
 
-        # 确保间隔至少为1像素
-        spacing = max(spacing, 1)
+        # 确保间隔至少为0像素
+        spacing = max(spacing, 0)
 
         # 计算有效区域的输出尺寸，考虑格子间的间隔
         # 宽度：格子数 * 格子宽度 + (格子数-1) * 间隔
@@ -245,10 +254,16 @@ class PuzzleExporter:
 
         return output_pixmap
 
-    def export_to_file(self, save_path: str, cell_width: int, cell_height: int):
+    def export_to_file(
+        self, save_path: str, cell_width: int, cell_height: int, custom_spacing=None
+    ):
         """导出拼图到文件"""
         # 导出时不显示网格线，使用纯白色背景
         output_pixmap = self.create_puzzle_image(
-            cell_width, cell_height, bg_color=Qt.white, draw_grid=False
+            cell_width,
+            cell_height,
+            bg_color=Qt.white,
+            draw_grid=False,
+            custom_spacing=custom_spacing,
         )
         output_pixmap.save(save_path)

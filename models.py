@@ -37,6 +37,9 @@ class GridCell:
     image: Optional[ImageInfo] = None
     is_occupied: bool = False
     is_main_cell: bool = True  # 是否是主单元格（对于竖屏图片，只有左上角是主单元格）
+    main_position: Optional[tuple] = (
+        None  # 如果是竖屏图片的占位格子，存储主格子的坐标 (row, col)
+    )
 
     def __post_init__(self):
         self.id = f"{self.row}_{self.col}"
@@ -109,12 +112,18 @@ class PuzzleModel:
             self.grid[row][col].image = image
             self.grid[row][col].is_occupied = True
             self.grid[row][col].is_main_cell = True
+            self.grid[row][col].main_position = None  # 横屏图片无需main_position
         else:
             # 竖屏图片占3个格子
             for i in range(3):
                 self.grid[row + i][col].image = image
                 self.grid[row + i][col].is_occupied = True
                 self.grid[row + i][col].is_main_cell = i == 0  # 只有第一个是主单元格
+                # 为非主格子设置main_position指向主格子
+                if i == 0:
+                    self.grid[row + i][col].main_position = None  # 主格子自身
+                else:
+                    self.grid[row + i][col].main_position = (row, col)  # 指向主格子
 
         # 移动到已使用列表
         if image in self.unused_images:
@@ -142,8 +151,7 @@ class PuzzleModel:
                     self.grid[r][c].image = None
                     self.grid[r][c].is_occupied = False
                     self.grid[r][c].is_main_cell = True
-
-        # 移动到未使用列表
+                    self.grid[r][c].main_position = None  # 移动到未使用列表
         if image in self.used_images:
             self.used_images.remove(image)
         if image not in self.unused_images:
@@ -157,6 +165,20 @@ class PuzzleModel:
             return None
         return self.grid[row][col]
 
+    def get_main_cell_position(self, row: int, col: int) -> tuple[int, int]:
+        """
+        获取指定位置对应的主格子位置
+        如果是竖屏图片的非主格子，则返回其main_position
+        如果是主格子或横屏图片，则返回自身位置
+        """
+        cell = self.get_cell(row, col)
+        if cell and cell.is_occupied and cell.main_position is not None:
+            # 这是竖屏图片的非主格子，返回主格子位置
+            return cell.main_position
+        else:
+            # 这是主格子或空格子，返回自身位置
+            return (row, col)
+
     def load_images_from_directory(self, directory: Path) -> int:
         """从目录加载图片"""
         from PIL import Image
@@ -165,25 +187,20 @@ class PuzzleModel:
         loaded_count = 0
 
         if not directory.exists() or not directory.is_dir():
-            return loaded_count
-
-        # 保存图片目录路径
+            return loaded_count  # 保存图片目录路径
         self.image_directory = directory
 
         for file_path in directory.iterdir():
             if file_path.suffix.lower() in config.SUPPORTED_IMAGE_FORMATS:
                 try:
                     with Image.open(file_path) as img:
-                        width, height = img.size
-                        aspect_ratio = width / height
-
-                        # 判断图片方向（基于16:9比例）
-                        if abs(aspect_ratio - config.IMAGE_ASPECT_RATIO) < 0.1:
+                        width, height = img.size  # 判断图片方向（简单的宽高比较）
+                        if width > height:
                             orientation = ImageOrientation.HORIZONTAL
-                        elif abs(aspect_ratio - (1 / config.IMAGE_ASPECT_RATIO)) < 0.1:
+                        elif height > width:
                             orientation = ImageOrientation.VERTICAL
                         else:
-                            continue  # 跳过不符合16:9比例的图片
+                            continue  # 跳过正方形图片
 
                         image_info = ImageInfo(
                             path=file_path,

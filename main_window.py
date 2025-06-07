@@ -23,6 +23,7 @@ from grid_widget import GridWidget
 from image_list_widget import ImageListWidget
 from state_manager import StateManager
 from preview_window import PreviewWindow
+from region_editor_window import RegionEditorWindow
 
 
 class MainWindow(QMainWindow):
@@ -30,6 +31,7 @@ class MainWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
+
         self.model = PuzzleModel(config.DEFAULT_GRID_ROWS, config.DEFAULT_GRID_COLS)
         self.state_manager = StateManager()
         self.is_modified = False  # 添加修改状态标记
@@ -96,9 +98,9 @@ class MainWindow(QMainWindow):
         file_menu.addSeparator()
 
         # 预览与导出功能
-        export_action = QAction("预览与导出拼图(&E)", self)
-        export_action.setShortcut("Ctrl+E")
-        export_action.triggered.connect(self._show_preview)  # 直接连接到_show_preview
+        export_action = QAction("预览与导出拼图(&P)", self)
+        export_action.setShortcut("Ctrl+P")
+        export_action.triggered.connect(self._show_preview)
         file_menu.addAction(export_action)
 
         file_menu.addSeparator()
@@ -119,6 +121,14 @@ class MainWindow(QMainWindow):
         clear_images_action = QAction("清空图片列表(&I)", self)
         clear_images_action.triggered.connect(self._clear_images)
         edit_menu.addAction(clear_images_action)
+
+        edit_menu.addSeparator()
+
+        # 区域编辑功能
+        edit_region_action = QAction("区域编辑(&E)", self)
+        edit_region_action.setShortcut("Ctrl+E")
+        edit_region_action.triggered.connect(self._show_region_editor)
+        edit_menu.addAction(edit_region_action)
 
         # 帮助菜单
         help_menu = menubar.addMenu("帮助(&H)")
@@ -518,3 +528,20 @@ class MainWindow(QMainWindow):
         preview_window.show()
         preview_window.raise_()  # 将窗口提到前台
         preview_window.activateWindow()  # 激活窗口
+
+    def _show_region_editor(self):
+        """显示区域编辑窗口"""
+        if not hasattr(self, "region_editor") or not self.region_editor:
+            self.region_editor = RegionEditorWindow(self.model, self)
+        self.region_editor.show()
+        self.region_editor.raise_()  # 将窗口提到前台
+        self.region_editor.activateWindow()  # 激活窗口
+
+    def _has_images_in_grid(self):
+        """检查网格中是否有图片"""
+        for row in range(self.model.rows):
+            for col in range(self.model.cols):
+                cell = self.model.get_cell(row, col)
+                if cell and cell.is_occupied and cell.is_main_cell:
+                    return True
+        return False
