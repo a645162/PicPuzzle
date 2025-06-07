@@ -162,6 +162,7 @@ class RegionEditorWindow(QDialog):
         # 网格预览
         self.grid_preview = GridPreviewWidget(self.model)
         self.grid_preview.area_selected.connect(self._on_area_selected)
+        self.grid_preview.area_drag_selected.connect(self._on_area_drag_selected)
         preview_layout.addWidget(self.grid_preview, 1)
 
         # 按钮
@@ -362,11 +363,15 @@ class RegionEditorWindow(QDialog):
 
         # 执行移动：自动清空冲突位置
         success = self._execute_region_move(images_to_move, current_rect)
-        
+
         # 如果移动成功，同时移动选中区域
         if success:
-            new_rect = QRect(current_rect.left(), current_rect.top() - 1, 
-                           current_rect.width(), current_rect.height())
+            new_rect = QRect(
+                current_rect.left(),
+                current_rect.top() - 1,
+                current_rect.width(),
+                current_rect.height(),
+            )
             self._update_spinboxes_from_rect(new_rect)
             self.grid_preview.set_selected_area(new_rect)
             self._update_status()
@@ -424,11 +429,15 @@ class RegionEditorWindow(QDialog):
 
         # 执行移动：自动清空冲突位置
         success = self._execute_region_move(images_to_move, current_rect)
-        
+
         # 如果移动成功，同时移动选中区域
         if success:
-            new_rect = QRect(current_rect.left(), current_rect.top() + 1, 
-                           current_rect.width(), current_rect.height())
+            new_rect = QRect(
+                current_rect.left(),
+                current_rect.top() + 1,
+                current_rect.width(),
+                current_rect.height(),
+            )
             self._update_spinboxes_from_rect(new_rect)
             self.grid_preview.set_selected_area(new_rect)
             self._update_status()
@@ -483,11 +492,15 @@ class RegionEditorWindow(QDialog):
 
         # 执行移动：自动清空冲突位置
         success = self._execute_region_move(images_to_move, current_rect)
-        
+
         # 如果移动成功，同时移动选中区域
         if success:
-            new_rect = QRect(current_rect.left() - 1, current_rect.top(), 
-                           current_rect.width(), current_rect.height())
+            new_rect = QRect(
+                current_rect.left() - 1,
+                current_rect.top(),
+                current_rect.width(),
+                current_rect.height(),
+            )
             self._update_spinboxes_from_rect(new_rect)
             self.grid_preview.set_selected_area(new_rect)
             self._update_status()
@@ -542,11 +555,15 @@ class RegionEditorWindow(QDialog):
 
         # 执行移动：自动清空冲突位置
         success = self._execute_region_move(images_to_move, current_rect)
-        
+
         # 如果移动成功，同时移动选中区域
         if success:
-            new_rect = QRect(current_rect.left() + 1, current_rect.top(), 
-                           current_rect.width(), current_rect.height())
+            new_rect = QRect(
+                current_rect.left() + 1,
+                current_rect.top(),
+                current_rect.width(),
+                current_rect.height(),
+            )
             self._update_spinboxes_from_rect(new_rect)
             self.grid_preview.set_selected_area(new_rect)
             self._update_status()
@@ -616,10 +633,24 @@ class RegionEditorWindow(QDialog):
 
     def _on_area_selected(self, row: int, col: int):
         """处理网格点击选择"""
-        # 设置选中的区域为点击的单个格子
-        new_rect = QRect(col, row, 1, 1)
-        self._update_spinboxes_from_rect(new_rect)
-        self.grid_preview.set_selected_area(new_rect)
+        # 检查当前是否有拖拽选择的区域
+        current_selected = self.grid_preview.selected_rect
+        if not current_selected.isNull() and (
+            current_selected.width() > 1 or current_selected.height() > 1
+        ):
+            # 如果已经有拖拽选择的区域，直接更新SpinBox，不要重新设置为1x1
+            self._update_spinboxes_from_rect(current_selected)
+            self._update_status()
+        else:
+            # 只有在单击的情况下才设置为1x1区域
+            new_rect = QRect(col, row, 1, 1)
+            self._update_spinboxes_from_rect(new_rect)
+            self.grid_preview.set_selected_area(new_rect)
+            self._update_status()
+
+    def _on_area_drag_selected(self, rect: QRect):
+        """处理拖拽选择区域"""
+        self._update_spinboxes_from_rect(rect)
         self._update_status()
 
     def _update_spinboxes_from_rect(self, rect: QRect):
