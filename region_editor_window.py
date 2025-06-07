@@ -93,9 +93,9 @@ class RegionEditorWindow(QDialog):
         move_row_layout = QHBoxLayout()
         move_left_button = QPushButton("← 左移")
         move_left_button.clicked.connect(self._move_left)
+        move_row_layout.addWidget(move_left_button)
         move_right_button = QPushButton("→ 右移")
         move_right_button.clicked.connect(self._move_right)
-        move_row_layout.addWidget(move_left_button)
         move_row_layout.addWidget(move_right_button)
         move_layout.addLayout(move_row_layout)
 
@@ -249,8 +249,12 @@ class RegionEditorWindow(QDialog):
         end_col = current_rect.left() + current_rect.width()
 
         print(f"DEBUG _update_status: current_rect = {current_rect}")
-        print(f"DEBUG _update_status: start_row={start_row}, start_col={start_col}, end_row={end_row}, end_col={end_col}")
-        print(f"DEBUG _update_status: width={current_rect.width()}, height={current_rect.height()}")
+        print(
+            f"DEBUG _update_status: start_row={start_row}, start_col={start_col}, end_row={end_row}, end_col={end_col}"
+        )
+        print(
+            f"DEBUG _update_status: width={current_rect.width()}, height={current_rect.height()}"
+        )
 
         # 获取图片统计信息
         vertical_images = self.get_vertical_images_in_region(current_rect)
@@ -277,119 +281,338 @@ class RegionEditorWindow(QDialog):
         rows = self.rows_spinbox.value()
         cols = self.cols_spinbox.value()
 
-        print(f"DEBUG _update_selected_area: start_row={start_row}, start_col={start_col}, rows={rows}, cols={cols}")
+        print(
+            f"DEBUG _update_selected_area: start_row={start_row}, start_col={start_col}, rows={rows}, cols={cols}"
+        )
 
         # 确保区域不超过网格范围
         end_row = min(start_row + rows, self.model.rows)
         end_col = min(start_col + cols, self.model.cols)
 
         print(f"DEBUG _update_selected_area: end_row={end_row}, end_col={end_col}")
-        print(f"DEBUG _update_selected_area: calculated width={end_col - start_col}, height={end_row - start_row}")
+        print(
+            f"DEBUG _update_selected_area: calculated width={end_col - start_col}, height={end_row - start_row}"
+        )
 
         # QRect(left, top, width, height) -> QRect(col, row, width, height)
         selected_rect = QRect(
             start_col, start_row, end_col - start_col, end_row - start_row
         )
-        
+
         print(f"DEBUG _update_selected_area: created QRect = {selected_rect}")
-        
+
         self.grid_preview.set_selected_area(selected_rect)
         self._update_status()
 
     def _move_up(self):
-        """向上移动区域"""
+        """向上移动区域内的图片"""
         current_rect = self.grid_preview.selected_rect
         if current_rect.isNull():
+            QMessageBox.information(self, "提示", "请先选择一个区域")
             return
 
-        new_top = max(current_rect.top() - 1, 0)
-        new_rect = QRect(
-            current_rect.left(), new_top, current_rect.width(), current_rect.height()
-        )
+        # 先自动扩展区域以包含完整的竖屏图片
+        self._auto_expand_for_vertical_images(silent=True)
+        current_rect = self.grid_preview.selected_rect
 
-        # 检查新位置是否有效
-        if new_rect.bottom() <= self.model.rows:
+        # 检查是否可以向上移动
+        start_row = current_rect.top()
+        if start_row == 0:
+            QMessageBox.warning(self, "移动失败", "选中区域已在最上方，无法向上移动")
+            return
+
+        # 收集区域内所有需要移动的图片
+        images_to_move = []
+        start_col = current_rect.left()
+        end_row = current_rect.top() + current_rect.height()
+        end_col = current_rect.left() + current_rect.width()
+
+        for row in range(start_row, end_row):
+            for col in range(start_col, end_col):
+                cell = self.model.get_cell(row, col)
+                if cell and cell.is_occupied and cell.is_main_cell:
+                    new_row = row - 1
+                    # 检查是否超出边界
+                    if cell.image.orientation == ImageOrientation.VERTICAL:
+                        if new_row < 0:
+                            QMessageBox.warning(
+                                self, "移动失败", "向上移动会导致竖屏图片超出网格边界"
+                            )
+                            return
+                    else:
+                        if new_row < 0:
+                            QMessageBox.warning(
+                                self, "移动失败", "向上移动会导致图片超出网格边界"
+                            )
+                            return
+
+                    images_to_move.append(
+                        {
+                            "image": cell.image,
+                            "old_row": row,
+                            "old_col": col,
+                            "new_row": new_row,
+                            "new_col": col,
+                        }
+                    )
+
+        if not images_to_move:
+            QMessageBox.information(self, "提示", "选中区域内没有图片需要移动")
+            return
+
+        # 执行移动：自动清空冲突位置
+        success = self._execute_region_move(images_to_move, current_rect)
+        
+        # 如果移动成功，同时移动选中区域
+        if success:
+            new_rect = QRect(current_rect.left(), current_rect.top() - 1, 
+                           current_rect.width(), current_rect.height())
             self._update_spinboxes_from_rect(new_rect)
             self.grid_preview.set_selected_area(new_rect)
-            self._auto_expand_for_vertical_images(silent=True)  # 移动操作需要自动检查竖屏图片
             self._update_status()
 
     def _move_down(self):
-        """向下移动区域"""
+        """向下移动区域内的图片"""
         current_rect = self.grid_preview.selected_rect
         if current_rect.isNull():
+            QMessageBox.information(self, "提示", "请先选择一个区域")
             return
 
-        new_top = current_rect.top() + 1
-        new_rect = QRect(
-            current_rect.left(), new_top, current_rect.width(), current_rect.height()
-        )
-
-        # 检查新位置是否有效，如果超出边界则调整大小
-        if new_rect.bottom() > self.model.rows:
-            # 超出下边界，调整高度
-            new_height = max(1, self.model.rows - new_top)
-            new_rect = QRect(
-                current_rect.left(), new_top, current_rect.width(), new_height
-            )
-
-        self._update_spinboxes_from_rect(new_rect)
-        self.grid_preview.set_selected_area(new_rect)
-        self._auto_expand_for_vertical_images(silent=True)  # 移动操作需要自动检查竖屏图片
-        self._update_status()
-
-    def _move_left(self):
-        """向左移动区域"""
+        # 先自动扩展区域以包含完整的竖屏图片
+        self._auto_expand_for_vertical_images(silent=True)
         current_rect = self.grid_preview.selected_rect
-        if current_rect.isNull():
+
+        # 收集区域内所有需要移动的图片
+        images_to_move = []
+        start_row = current_rect.top()
+        start_col = current_rect.left()
+        end_row = current_rect.top() + current_rect.height()
+        end_col = current_rect.left() + current_rect.width()
+
+        for row in range(start_row, end_row):
+            for col in range(start_col, end_col):
+                cell = self.model.get_cell(row, col)
+                if cell and cell.is_occupied and cell.is_main_cell:
+                    new_row = row + 1
+                    # 检查是否超出边界
+                    if cell.image.orientation == ImageOrientation.VERTICAL:
+                        if new_row + config.VERTICAL_IMAGE_SPAN > self.model.rows:
+                            QMessageBox.warning(
+                                self, "移动失败", "向下移动会导致竖屏图片超出网格边界"
+                            )
+                            return
+                    else:
+                        if new_row >= self.model.rows:
+                            QMessageBox.warning(
+                                self, "移动失败", "向下移动会导致图片超出网格边界"
+                            )
+                            return
+
+                    images_to_move.append(
+                        {
+                            "image": cell.image,
+                            "old_row": row,
+                            "old_col": col,
+                            "new_row": new_row,
+                            "new_col": col,
+                        }
+                    )
+
+        if not images_to_move:
+            QMessageBox.information(self, "提示", "选中区域内没有图片需要移动")
             return
 
-        new_left = max(current_rect.left() - 1, 0)
-        new_rect = QRect(
-            new_left, current_rect.top(), current_rect.width(), current_rect.height()
-        )
-
-        # 检查新位置是否有效
-        if new_rect.right() <= self.model.cols:
+        # 执行移动：自动清空冲突位置
+        success = self._execute_region_move(images_to_move, current_rect)
+        
+        # 如果移动成功，同时移动选中区域
+        if success:
+            new_rect = QRect(current_rect.left(), current_rect.top() + 1, 
+                           current_rect.width(), current_rect.height())
             self._update_spinboxes_from_rect(new_rect)
             self.grid_preview.set_selected_area(new_rect)
-            self._auto_expand_for_vertical_images(silent=True)  # 移动操作需要自动检查竖屏图片
+            self._update_status()
+
+    def _move_left(self):
+        """向左移动区域内的图片"""
+        current_rect = self.grid_preview.selected_rect
+        if current_rect.isNull():
+            QMessageBox.information(self, "提示", "请先选择一个区域")
+            return
+
+        # 先自动扩展区域以包含完整的竖屏图片
+        self._auto_expand_for_vertical_images(silent=True)
+        current_rect = self.grid_preview.selected_rect
+
+        # 检查是否可以向左移动
+        start_col = current_rect.left()
+        if start_col == 0:
+            QMessageBox.warning(self, "移动失败", "选中区域已在最左侧，无法向左移动")
+            return
+
+        # 收集区域内所有需要移动的图片
+        images_to_move = []
+        start_row = current_rect.top()
+        end_row = current_rect.top() + current_rect.height()
+        end_col = current_rect.left() + current_rect.width()
+
+        for row in range(start_row, end_row):
+            for col in range(start_col, end_col):
+                cell = self.model.get_cell(row, col)
+                if cell and cell.is_occupied and cell.is_main_cell:
+                    new_col = col - 1
+                    if new_col < 0:
+                        QMessageBox.warning(
+                            self, "移动失败", "向左移动会导致图片超出网格边界"
+                        )
+                        return
+
+                    images_to_move.append(
+                        {
+                            "image": cell.image,
+                            "old_row": row,
+                            "old_col": col,
+                            "new_row": row,
+                            "new_col": new_col,
+                        }
+                    )
+
+        if not images_to_move:
+            QMessageBox.information(self, "提示", "选中区域内没有图片需要移动")
+            return
+
+        # 执行移动：自动清空冲突位置
+        success = self._execute_region_move(images_to_move, current_rect)
+        
+        # 如果移动成功，同时移动选中区域
+        if success:
+            new_rect = QRect(current_rect.left() - 1, current_rect.top(), 
+                           current_rect.width(), current_rect.height())
+            self._update_spinboxes_from_rect(new_rect)
+            self.grid_preview.set_selected_area(new_rect)
             self._update_status()
 
     def _move_right(self):
-        """向右移动区域"""
+        """向右移动区域内的图片"""
         current_rect = self.grid_preview.selected_rect
         if current_rect.isNull():
+            QMessageBox.information(self, "提示", "请先选择一个区域")
             return
 
-        new_left = current_rect.left() + 1
-        new_rect = QRect(
-            new_left, current_rect.top(), current_rect.width(), current_rect.height()
-        )
+        # 先自动扩展区域以包含完整的竖屏图片
+        self._auto_expand_for_vertical_images(silent=True)
+        current_rect = self.grid_preview.selected_rect
 
-        # 检查新位置是否有效，如果超出边界则调整大小
-        if new_rect.right() > self.model.cols:
-            # 超出右边界，调整宽度
-            new_width = max(1, self.model.cols - new_left)
-            new_rect = QRect(
-                new_left, current_rect.top(), new_width, current_rect.height()
-            )
+        # 检查是否可以向右移动
+        end_col = current_rect.left() + current_rect.width()
+        if end_col >= self.model.cols:
+            QMessageBox.warning(self, "移动失败", "选中区域已在最右侧，无法向右移动")
+            return
 
-        self._update_spinboxes_from_rect(new_rect)
-        self.grid_preview.set_selected_area(new_rect)
-        self._auto_expand_for_vertical_images(silent=True)  # 移动操作需要自动检查竖屏图片
-        self._update_status()
+        # 收集区域内所有需要移动的图片
+        images_to_move = []
+        start_row = current_rect.top()
+        start_col = current_rect.left()
+        end_row = current_rect.top() + current_rect.height()
 
-    def _update_spinboxes_from_rect(self, rect: QRect):
-        """根据矩形更新数值框"""
-        print(f"DEBUG _update_spinboxes_from_rect: input rect = {rect}")
-        print(f"DEBUG _update_spinboxes_from_rect: setting start_row={rect.top()}, start_col={rect.left()}")
-        print(f"DEBUG _update_spinboxes_from_rect: setting rows={rect.height()}, cols={rect.width()}")
+        for row in range(start_row, end_row):
+            for col in range(start_col, end_col):
+                cell = self.model.get_cell(row, col)
+                if cell and cell.is_occupied and cell.is_main_cell:
+                    new_col = col + 1
+                    if new_col >= self.model.cols:
+                        QMessageBox.warning(
+                            self, "移动失败", "向右移动会导致图片超出网格边界"
+                        )
+                        return
+
+                    images_to_move.append(
+                        {
+                            "image": cell.image,
+                            "old_row": row,
+                            "old_col": col,
+                            "new_row": row,
+                            "new_col": new_col,
+                        }
+                    )
+
+        if not images_to_move:
+            QMessageBox.information(self, "提示", "选中区域内没有图片需要移动")
+            return
+
+        # 执行移动：自动清空冲突位置
+        success = self._execute_region_move(images_to_move, current_rect)
         
-        self.start_row_spinbox.setValue(rect.top())
-        self.start_col_spinbox.setValue(rect.left())
-        self.rows_spinbox.setValue(rect.height())
-        self.cols_spinbox.setValue(rect.width())
+        # 如果移动成功，同时移动选中区域
+        if success:
+            new_rect = QRect(current_rect.left() + 1, current_rect.top(), 
+                           current_rect.width(), current_rect.height())
+            self._update_spinboxes_from_rect(new_rect)
+            self.grid_preview.set_selected_area(new_rect)
+            self._update_status()
+
+    def _execute_region_move(self, images_to_move, current_rect):
+        """执行区域移动操作"""
+        if not images_to_move:
+            return False
+
+        # 收集所有需要清空的位置（包括原位置和目标位置的所有冲突）
+        positions_to_clear = set()
+
+        # 首先添加所有原位置
+        for item in images_to_move:
+            if item["image"].orientation == ImageOrientation.VERTICAL:
+                for r in range(
+                    item["old_row"], item["old_row"] + config.VERTICAL_IMAGE_SPAN
+                ):
+                    positions_to_clear.add((r, item["old_col"]))
+            else:
+                positions_to_clear.add((item["old_row"], item["old_col"]))
+
+        # 然后添加所有目标位置（包括可能的冲突位置）
+        for item in images_to_move:
+            if item["image"].orientation == ImageOrientation.VERTICAL:
+                for r in range(
+                    item["new_row"], item["new_row"] + config.VERTICAL_IMAGE_SPAN
+                ):
+                    positions_to_clear.add((r, item["new_col"]))
+            else:
+                positions_to_clear.add((item["new_row"], item["new_col"]))
+
+        # 清空所有相关位置（这会自动处理冲突）
+        cleared_count = 0
+        for row, col in positions_to_clear:
+            if 0 <= row < self.model.rows and 0 <= col < self.model.cols:
+                cell = self.model.get_cell(row, col)
+                if cell and cell.is_occupied:
+                    self.model.remove_image(row, col)
+                    cleared_count += 1
+
+        # 再放置到新位置
+        moved_count = 0
+        for item in images_to_move:
+            if self.model.place_image(item["new_row"], item["new_col"], item["image"]):
+                moved_count += 1
+
+        # 更新显示
+        self.update_preview()
+        if self.parent():
+            # 更新主窗口显示
+            self.parent().grid_widget.refresh_display()
+            self.parent().image_list_widget.update_lists()
+            self.parent().set_modified(True)  # 标记主窗口为已修改
+
+        if moved_count > 0:
+            message = f"已成功移动 {moved_count} 张图片"
+            if cleared_count > len(images_to_move):
+                # 有额外的清空操作（说明清空了冲突的图片）
+                extra_cleared = cleared_count - len(images_to_move)
+                message += f"\n自动清空了 {extra_cleared} 个冲突位置"
+            QMessageBox.information(self, "移动完成", message)
+            return True
+        else:
+            QMessageBox.warning(self, "移动失败", "没有图片成功移动")
+            return False
 
     def _on_area_selected(self, row: int, col: int):
         """处理网格点击选择"""
@@ -399,12 +622,34 @@ class RegionEditorWindow(QDialog):
         self.grid_preview.set_selected_area(new_rect)
         self._update_status()
 
+    def _update_spinboxes_from_rect(self, rect: QRect):
+        """根据矩形区域更新SpinBox的值"""
+        # 临时阻止信号发送，避免循环触发
+        self.start_row_spinbox.blockSignals(True)
+        self.start_col_spinbox.blockSignals(True)
+        self.rows_spinbox.blockSignals(True)
+        self.cols_spinbox.blockSignals(True)
+
+        # 更新SpinBox的值
+        self.start_row_spinbox.setValue(rect.top())
+        self.start_col_spinbox.setValue(rect.left())
+        self.rows_spinbox.setValue(rect.height())
+        self.cols_spinbox.setValue(rect.width())
+
+        # 恢复信号发送
+        self.start_row_spinbox.blockSignals(False)
+        self.start_col_spinbox.blockSignals(False)
+        self.rows_spinbox.blockSignals(False)
+        self.cols_spinbox.blockSignals(False)
+
     def _select_full_grid(self):
         """选择整个网格"""
         new_rect = QRect(0, 0, self.model.cols, self.model.rows)
         self._update_spinboxes_from_rect(new_rect)
         self.grid_preview.set_selected_area(new_rect)
-        self._auto_expand_for_vertical_images(silent=True)  # 快速选择需要自动检查竖屏图片
+        self._auto_expand_for_vertical_images(
+            silent=True
+        )  # 快速选择需要自动检查竖屏图片
         self._update_status()
 
     def _select_single_row(self):
@@ -414,7 +659,9 @@ class RegionEditorWindow(QDialog):
         new_rect = QRect(0, start_row, self.model.cols, 1)
         self._update_spinboxes_from_rect(new_rect)
         self.grid_preview.set_selected_area(new_rect)
-        self._auto_expand_for_vertical_images(silent=True)  # 快速选择需要自动检查竖屏图片
+        self._auto_expand_for_vertical_images(
+            silent=True
+        )  # 快速选择需要自动检查竖屏图片
         self._update_status()
 
     def _select_single_col(self):
@@ -424,7 +671,9 @@ class RegionEditorWindow(QDialog):
         new_rect = QRect(start_col, 0, 1, self.model.rows)
         self._update_spinboxes_from_rect(new_rect)
         self.grid_preview.set_selected_area(new_rect)
-        self._auto_expand_for_vertical_images(silent=True)  # 快速选择需要自动检查竖屏图片
+        self._auto_expand_for_vertical_images(
+            silent=True
+        )  # 快速选择需要自动检查竖屏图片
         self._update_status()
 
     def get_vertical_images_in_region(self, rect: QRect):
@@ -569,8 +818,12 @@ class RegionEditorWindow(QDialog):
                         empty_cells += 1
                         print(f"  格子({row}, {col}): 空闲")
 
-        print(f"格子统计: 总计{end_row-start_row}x{end_col-start_col}={occupied_cells+empty_cells}个格子")
-        print(f"  空闲: {empty_cells}, 已占用: {occupied_cells} (主格子: {main_cells}, 子格子: {sub_cells})")
+        print(
+            f"格子统计: 总计{end_row-start_row}x{end_col-start_col}={occupied_cells+empty_cells}个格子"
+        )
+        print(
+            f"  空闲: {empty_cells}, 已占用: {occupied_cells} (主格子: {main_cells}, 子格子: {sub_cells})"
+        )
         print(f"  竖屏格子: {vertical_cells}, 横屏格子: {horizontal_cells}")
 
         # 获取选中区域内的所有竖屏图片
@@ -583,7 +836,9 @@ class RegionEditorWindow(QDialog):
             print(
                 f"    竖屏图片 {i+1}: 主格子({vimg['row']}, {vimg['col']}) - {vimg['image'].path.name}"
             )
-            print(f"      占用行范围: {vimg['start_row']}-{vimg['end_row']-1} (需要{vimg['end_row']-vimg['start_row']}行)")
+            print(
+                f"      占用行范围: {vimg['start_row']}-{vimg['end_row']-1} (需要{vimg['end_row']-vimg['start_row']}行)"
+            )
             print(f"      占用格子: {vimg['occupied_cells']}")
 
         print(f"  横屏图片数量: {len(horizontal_images)}")
@@ -605,7 +860,9 @@ class RegionEditorWindow(QDialog):
         new_left = current_rect.left()
         new_right = current_rect.right()
 
-        print(f"原始边界: top={new_top}, bottom={new_bottom}, left={new_left}, right={new_right}")
+        print(
+            f"原始边界: top={new_top}, bottom={new_bottom}, left={new_left}, right={new_right}"
+        )
 
         expansion_needed = False
         expansion_details = []
@@ -643,7 +900,9 @@ class RegionEditorWindow(QDialog):
         if not expansion_needed:
             print("所有竖屏图片都已完整包含在选中区域内，无需扩展")
             if not silent:
-                QMessageBox.information(self, "提示", "选中区域已包含所有完整的竖屏图片")
+                QMessageBox.information(
+                    self, "提示", "选中区域已包含所有完整的竖屏图片"
+                )
             print("===================\n")
             return False
 
@@ -653,9 +912,13 @@ class RegionEditorWindow(QDialog):
         new_bottom = min(self.model.rows, new_bottom)
 
         if original_new_top != new_top or original_new_bottom != new_bottom:
-            print(f"边界调整: 原始({original_new_top}-{original_new_bottom-1}) -> 最终({new_top}-{new_bottom-1})")
+            print(
+                f"边界调整: 原始({original_new_top}-{original_new_bottom-1}) -> 最终({new_top}-{new_bottom-1})"
+            )
 
-        print(f"最终边界: top={new_top}, bottom={new_bottom}, left={new_left}, right={new_right}")
+        print(
+            f"最终边界: top={new_top}, bottom={new_bottom}, left={new_left}, right={new_right}"
+        )
 
         # 创建新的矩形 - 修复：保持原始的左右边界，只扩展上下
         new_width = current_rect.width()  # 保持原始宽度
