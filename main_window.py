@@ -6,14 +6,10 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QWidget,
     QHBoxLayout,
-    QVBoxLayout,
     QSplitter,
     QMessageBox,
     QFileDialog,
-    QDialog,
     QLabel,
-    QPushButton,
-    QSpinBox,
 )
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QAction
@@ -27,76 +23,6 @@ from grid_widget import GridWidget
 from image_list_widget import ImageListWidget
 from state_manager import StateManager
 from preview_window import PreviewWindow
-from puzzle_exporter import PuzzleExporter
-
-
-class ExportDialog(QDialog):
-    """导出对话框"""
-
-    def __init__(self, model: PuzzleModel, parent=None):
-        super().__init__(parent)
-        self.model = model
-        self.setWindowTitle("导出拼图")
-        self.setModal(True)
-        self.setup_ui()
-
-    def setup_ui(self):
-        """设置界面"""
-        layout = QVBoxLayout(self)
-
-        # 输出尺寸设置
-        size_layout = QHBoxLayout()
-        size_layout.addWidget(QLabel("单个格子输出尺寸:"))
-
-        self.width_spinbox = QSpinBox()
-        self.width_spinbox.setRange(100, 10000)
-        self.width_spinbox.setValue(config.GRID_OUTPUT_WIDTH)
-        size_layout.addWidget(self.width_spinbox)
-
-        size_layout.addWidget(QLabel("x"))
-
-        self.height_spinbox = QSpinBox()
-        self.height_spinbox.setRange(100, 10000)
-        self.height_spinbox.setValue(config.GRID_OUTPUT_HEIGHT)
-        size_layout.addWidget(self.height_spinbox)
-
-        layout.addLayout(size_layout)
-
-        # 预览信息
-        info_label = QLabel()
-        total_width = self.width_spinbox.value() * self.model.cols
-        total_height = self.height_spinbox.value() * self.model.rows
-        info_label.setText(f"总输出尺寸: {total_width} x {total_height}")
-        layout.addWidget(info_label)
-
-        # 按钮
-        button_layout = QHBoxLayout()
-
-        export_button = QPushButton("导出")
-        export_button.clicked.connect(self.accept)
-        button_layout.addWidget(export_button)
-
-        cancel_button = QPushButton("取消")
-        cancel_button.clicked.connect(self.reject)
-        button_layout.addWidget(cancel_button)
-
-        layout.addLayout(button_layout)
-
-        # 连接信号更新预览
-        self.width_spinbox.valueChanged.connect(
-            lambda: info_label.setText(
-                f"总输出尺寸: {self.width_spinbox.value() * self.model.cols} x {self.height_spinbox.value() * self.model.rows}"
-            )
-        )
-        self.height_spinbox.valueChanged.connect(
-            lambda: info_label.setText(
-                f"总输出尺寸: {self.width_spinbox.value() * self.model.cols} x {self.height_spinbox.value() * self.model.rows}"
-            )
-        )
-
-    def get_output_size(self):
-        """获取输出尺寸"""
-        return self.width_spinbox.value(), self.height_spinbox.value()
 
 
 class MainWindow(QMainWindow):
@@ -169,15 +95,10 @@ class MainWindow(QMainWindow):
 
         file_menu.addSeparator()
 
-        # 预览功能
-        preview_action = QAction("预览拼图(&P)", self)
-        preview_action.setShortcut("Ctrl+P")
-        preview_action.triggered.connect(self._show_preview)
-        file_menu.addAction(preview_action)
-
-        export_action = QAction("导出拼图(&E)", self)
+        # 预览与导出功能
+        export_action = QAction("预览与导出拼图(&E)", self)
         export_action.setShortcut("Ctrl+E")
-        export_action.triggered.connect(self._export_puzzle)
+        export_action.triggered.connect(self._show_preview)  # 直接连接到_show_preview
         file_menu.addAction(export_action)
 
         file_menu.addSeparator()
@@ -391,51 +312,6 @@ class MainWindow(QMainWindow):
                     )
             except Exception as e:
                 QMessageBox.warning(self, "加载失败", f"加载图片时出错: {e}")
-
-    def _export_puzzle(self):
-        """导出拼图"""
-        # 检查是否有图片
-        has_images = False
-        for row in range(self.model.rows):
-            for col in range(self.model.cols):
-                cell = self.model.get_cell(row, col)
-                if cell and cell.is_occupied and cell.is_main_cell:
-                    has_images = True
-                    break
-            if has_images:
-                break
-
-        if not has_images:
-            QMessageBox.warning(self, "导出失败", "网格中没有任何图片")
-            return
-
-        # 显示导出对话框
-        dialog = ExportDialog(self.model, self)
-
-        if dialog.exec() == QDialog.Accepted:
-            cell_width, cell_height = dialog.get_output_size()
-
-            # 选择保存位置
-            save_path, _ = QFileDialog.getSaveFileName(
-                self,
-                "保存拼图",
-                str(Path.home() / "puzzle.png"),
-                "PNG图片 (*.png);;JPEG图片 (*.jpg);;所有文件 (*.*)",
-            )
-
-            if save_path:
-                try:
-                    self._export_puzzle_to_file(save_path, cell_width, cell_height)
-                    QMessageBox.information(
-                        self, "导出成功", f"拼图已保存到: {save_path}"
-                    )
-                except Exception as e:
-                    QMessageBox.warning(self, "导出失败", f"导出时出错: {e}")
-
-    def _export_puzzle_to_file(self, save_path: str, cell_width: int, cell_height: int):
-        """导出拼图到文件"""
-        exporter = PuzzleExporter(self.model)
-        exporter.export_to_file(save_path, cell_width, cell_height)
 
     def _clear_grid(self):
         """清空网格"""

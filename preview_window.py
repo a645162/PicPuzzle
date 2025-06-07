@@ -2,14 +2,19 @@
 """
 预览窗口
 """
+from pathlib import Path
+
 from PySide6.QtWidgets import (
     QDialog,
+    QFileDialog,
     QVBoxLayout,
     QHBoxLayout,
     QLabel,
     QPushButton,
     QScrollArea,
     QCheckBox,
+    QSpinBox,
+    QMessageBox,
 )
 from PySide6.QtCore import Qt
 
@@ -90,6 +95,12 @@ class PreviewWindow(QDialog):
         # 添加弹簧，使按钮右对齐
         button_layout.addStretch()
 
+        # 始终显示导出按钮
+        export_button = QPushButton("导出")
+        export_button.setFixedHeight(35)
+        export_button.clicked.connect(self._export_puzzle)
+        button_layout.addWidget(export_button)
+
         close_button = QPushButton("关闭")
         close_button.setFixedHeight(35)
         close_button.clicked.connect(self.close)
@@ -100,6 +111,32 @@ class PreviewWindow(QDialog):
         # 设置布局边距
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(10)
+
+    def _export_puzzle(self):
+        """执行导出操作"""
+        # 显示导出对话框
+        dialog = ExportDialog(self.model, self)
+
+        if dialog.exec() == QDialog.Accepted:
+            cell_width, cell_height = dialog.get_output_size()
+
+            # 选择保存位置
+            save_path, _ = QFileDialog.getSaveFileName(
+                self,
+                "保存拼图",
+                str(Path.home() / "puzzle.png"),
+                "PNG图片 (*.png);;JPEG图片 (*.jpg);;所有文件 (*.*)",
+            )
+
+            if save_path:
+                try:
+                    exporter = PuzzleExporter(self.model)
+                    exporter.export_to_file(save_path, cell_width, cell_height)
+                    QMessageBox.information(
+                        self, "导出成功", f"拼图已保存到: {save_path}"
+                    )
+                except Exception as e:
+                    QMessageBox.warning(self, "导出失败", f"导出时出错: {e}")
 
     def update_preview(self):
         """更新预览"""
@@ -147,3 +184,72 @@ class PreviewWindow(QDialog):
         return self.exporter.create_puzzle_image(
             cell_width, cell_height, bg_color=bg_color, draw_grid=show_grid
         )
+
+
+class ExportDialog(QDialog):
+    """导出对话框"""
+
+    def __init__(self, model: PuzzleModel, parent=None):
+        super().__init__(parent)
+        self.model = model
+        self.setWindowTitle("导出拼图")
+        self.setModal(True)
+        self.setup_ui()
+
+    def setup_ui(self):
+        """设置界面"""
+        layout = QVBoxLayout(self)
+
+        # 输出尺寸设置
+        size_layout = QHBoxLayout()
+        size_layout.addWidget(QLabel("单个格子输出尺寸:"))
+
+        self.width_spinbox = QSpinBox()
+        self.width_spinbox.setRange(100, 10000)
+        self.width_spinbox.setValue(config.GRID_OUTPUT_WIDTH)
+        size_layout.addWidget(self.width_spinbox)
+
+        size_layout.addWidget(QLabel("x"))
+
+        self.height_spinbox = QSpinBox()
+        self.height_spinbox.setRange(100, 10000)
+        self.height_spinbox.setValue(config.GRID_OUTPUT_HEIGHT)
+        size_layout.addWidget(self.height_spinbox)
+
+        layout.addLayout(size_layout)
+
+        # 预览信息
+        info_label = QLabel()
+        total_width = self.width_spinbox.value() * self.model.cols
+        total_height = self.height_spinbox.value() * self.model.rows
+        info_label.setText(f"总输出尺寸: {total_width} x {total_height}")
+        layout.addWidget(info_label)
+
+        # 按钮
+        button_layout = QHBoxLayout()
+
+        export_button = QPushButton("导出")
+        export_button.clicked.connect(self.accept)
+        button_layout.addWidget(export_button)
+
+        cancel_button = QPushButton("取消")
+        cancel_button.clicked.connect(self.reject)
+        button_layout.addWidget(cancel_button)
+
+        layout.addLayout(button_layout)
+
+        # 连接信号更新预览
+        self.width_spinbox.valueChanged.connect(
+            lambda: info_label.setText(
+                f"总输出尺寸: {self.width_spinbox.value() * self.model.cols} x {self.height_spinbox.value() * self.model.rows}"
+            )
+        )
+        self.height_spinbox.valueChanged.connect(
+            lambda: info_label.setText(
+                f"总输出尺寸: {self.width_spinbox.value() * self.model.cols} x {self.height_spinbox.value() * self.model.rows}"
+            )
+        )
+
+    def get_output_size(self):
+        """获取输出尺寸"""
+        return self.width_spinbox.value(), self.height_spinbox.value()
