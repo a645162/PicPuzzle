@@ -3,7 +3,6 @@
 区域编辑窗口
 """
 from PySide6.QtWidgets import (
-    QWidget,
     QDialog,
     QVBoxLayout,
     QHBoxLayout,
@@ -12,11 +11,11 @@ from PySide6.QtWidgets import (
     QSpinBox,
     QMessageBox,
 )
-from PySide6.QtCore import Qt, QRect, Signal
-from PySide6.QtGui import QPainter, QColor, QPen, QMouseEvent
+from PySide6.QtCore import Qt, QRect
 
 import config
 from models import PuzzleModel, ImageOrientation
+from grid_preview_widget import GridPreviewWidget
 
 # ========== 常量配置 ==========
 
@@ -26,36 +25,6 @@ WINDOW_MIN_WIDTH = 800
 WINDOW_MIN_HEIGHT = 600
 WINDOW_DEFAULT_WIDTH = 800
 WINDOW_DEFAULT_HEIGHT = 600
-
-# 网格预览组件配置
-GRID_MIN_WIDTH = 400
-GRID_MIN_HEIGHT = 300
-GRID_BACKGROUND_COLOR = "white"
-GRID_BORDER_COLOR = "#ccc"
-
-# 颜色配置
-# 横屏图片颜色
-HORIZONTAL_IMAGE_COLOR = QColor(60, 179, 113, 150)  # 海绿色
-HORIZONTAL_IMAGE_TEXT_COLOR = QColor(255, 255, 255)
-
-# 竖屏图片颜色
-VERTICAL_IMAGE_MAIN_COLOR = QColor(70, 130, 180, 150)  # 钢蓝色（主格子）
-VERTICAL_IMAGE_SUB_COLOR = QColor(135, 206, 235, 100)  # 天空蓝色（占位格子）
-VERTICAL_IMAGE_TEXT_COLOR = QColor(255, 255, 255)
-
-# 空闲格子颜色
-EMPTY_CELL_COLOR = QColor(255, 255, 255)
-OCCUPIED_FALLBACK_COLOR = QColor(200, 200, 200, 100)
-
-# 网格线颜色
-GRID_LINE_COLOR = QColor(200, 200, 200)
-GRID_LINE_WIDTH = 1
-GRID_OUTLINE_COLOR = QColor(150, 150, 150)
-
-# 选中区域颜色
-SELECTED_AREA_BORDER_COLOR = QColor(255, 0, 0)
-SELECTED_AREA_FILL_COLOR = QColor(255, 0, 0, 50)
-SELECTED_AREA_BORDER_WIDTH = 3
 
 # 按钮配置
 BUTTON_HEIGHT = 35
@@ -67,10 +36,6 @@ LAYOUT_MARGIN = 10
 LAYOUT_SPACING = 10
 BUTTON_LAYOUT_SPACING = 5
 
-# 文本配置
-HORIZONTAL_IMAGE_MARKER = "H"
-VERTICAL_IMAGE_MARKER = "V"
-
 # 状态消息
 STATUS_NO_SELECTION = "请选择一个区域"
 STATUS_NO_VERTICAL_IMAGES = "选中区域内没有竖屏图片"
@@ -80,126 +45,6 @@ CLEAR_SUCCESS_TITLE = "成功"
 CLEAR_SUCCESS_MESSAGE = "区域已清空"
 
 # ==============================
-
-
-class GridPreviewWidget(QWidget):
-    """网格预览部件，用于显示整个网格和选中区域"""
-
-    area_selected = Signal(int, int)  # 发送选中的区域信号 (row, col)
-
-    def __init__(self, model: PuzzleModel, parent=None):
-        super().__init__(parent)
-        self.model = model
-        self.selected_rect = QRect()  # 当前选中的区域
-        self.setStyleSheet(
-            f"background-color: {GRID_BACKGROUND_COLOR}; border: 1px solid {GRID_BORDER_COLOR};"
-        )
-        self.setMinimumSize(GRID_MIN_WIDTH, GRID_MIN_HEIGHT)  # 设置最小尺寸
-
-    def paintEvent(self, event):
-        """绘制网格和选中区域"""
-        super().paintEvent(event)
-        painter = QPainter(self)
-
-        # 计算每个单元格的大小
-        cell_width = self.width() / self.model.cols
-        cell_height = self.height() / self.model.rows
-
-        # 绘制网格背景（区分已占用和空闲的格子，以及横屏和竖屏图片）
-        for row in range(self.model.rows):
-            for col in range(self.model.cols):
-                cell = self.model.get_cell(row, col)
-                x = col * cell_width
-                y = row * cell_height
-
-                if cell and cell.is_occupied and cell.image:
-                    # 根据图片类型选择不同颜色
-                    if cell.image.orientation == ImageOrientation.VERTICAL:
-                        # 竖屏图片用蓝色系
-                        if cell.is_main_cell:
-                            painter.setBrush(VERTICAL_IMAGE_MAIN_COLOR)
-                            # 在主格子上绘制"V"标记
-                            painter.setPen(QPen(GRID_LINE_COLOR, GRID_LINE_WIDTH))
-                            painter.drawRect(x, y, cell_width, cell_height)
-                            painter.setPen(QPen(VERTICAL_IMAGE_TEXT_COLOR, 2))
-                            painter.drawText(
-                                x + cell_width // 2 - 5,
-                                y + cell_height // 2 + 5,
-                                VERTICAL_IMAGE_MARKER,
-                            )
-                        else:
-                            painter.setBrush(VERTICAL_IMAGE_SUB_COLOR)
-                            painter.setPen(QPen(GRID_LINE_COLOR, GRID_LINE_WIDTH))
-                            painter.drawRect(x, y, cell_width, cell_height)
-                    else:
-                        # 横屏图片用绿色系
-                        painter.setBrush(HORIZONTAL_IMAGE_COLOR)
-                        painter.setPen(QPen(GRID_LINE_COLOR, GRID_LINE_WIDTH))
-                        painter.drawRect(x, y, cell_width, cell_height)
-                        # 在横屏图片格子上绘制"H"标记
-                        painter.setPen(QPen(HORIZONTAL_IMAGE_TEXT_COLOR, 2))
-                        painter.drawText(
-                            x + cell_width // 2 - 5,
-                            y + cell_height // 2 + 5,
-                            HORIZONTAL_IMAGE_MARKER,
-                        )
-                elif cell and cell.is_occupied:
-                    # 占用但没有图片信息的格子（应该不会出现，但为了安全）
-                    painter.setBrush(OCCUPIED_FALLBACK_COLOR)
-                    painter.setPen(QPen(GRID_LINE_COLOR, GRID_LINE_WIDTH))
-                    painter.drawRect(x, y, cell_width, cell_height)
-                else:
-                    # 空闲格子用白色填充
-                    painter.setBrush(EMPTY_CELL_COLOR)
-                    painter.setPen(QPen(GRID_LINE_COLOR, GRID_LINE_WIDTH))
-                    painter.drawRect(x, y, cell_width, cell_height)
-
-        # 绘制网格线
-        painter.setBrush(QColor(0, 0, 0, 0))  # 透明填充
-        painter.setPen(QPen(GRID_OUTLINE_COLOR, GRID_LINE_WIDTH))
-        for row in range(self.model.rows + 1):
-            y = row * cell_height
-            painter.drawLine(0, y, self.width(), y)
-
-        for col in range(self.model.cols + 1):
-            x = col * cell_width
-            painter.drawLine(x, 0, x, self.height())
-
-        # 绘制选中区域（如果存在）
-        if not self.selected_rect.isNull():
-            painter.setPen(QPen(SELECTED_AREA_BORDER_COLOR, SELECTED_AREA_BORDER_WIDTH))
-            painter.setBrush(SELECTED_AREA_FILL_COLOR)
-            # QRect的x()对应col，y()对应row
-            x = self.selected_rect.x() * cell_width
-            y = self.selected_rect.y() * cell_height
-            width = self.selected_rect.width() * cell_width
-            height = self.selected_rect.height() * cell_height
-            painter.drawRect(x, y, width, height)
-
-    def set_selected_area(self, rect: QRect):
-        """设置选中区域并更新界面"""
-        self.selected_rect = rect
-        self.update()
-
-    def mousePressEvent(self, event: QMouseEvent):
-        """鼠标点击事件，选择单个格子"""
-        if event.button() == Qt.LeftButton:
-            # 计算点击的格子位置
-            cell_width = self.width() / self.model.cols
-            cell_height = self.height() / self.model.rows
-
-            col = int(event.position().x() / cell_width)
-            row = int(event.position().y() / cell_height)
-
-            # 确保坐标在有效范围内
-            if 0 <= row < self.model.rows and 0 <= col < self.model.cols:
-                # 设置为1x1的选择区域，使用(left, top, width, height)格式
-                # 这里left=col, top=row
-                new_rect = QRect(col, row, 1, 1)
-                self.set_selected_area(new_rect)
-                self.area_selected.emit(row, col)
-
-        super().mousePressEvent(event)
 
 
 class RegionEditorWindow(QDialog):
@@ -358,11 +203,6 @@ class RegionEditorWindow(QDialog):
         auto_expand_button.clicked.connect(self._auto_expand_for_vertical_images)
         button_layout.addWidget(auto_expand_button)
 
-        debug_button = QPushButton("调试信息")
-        debug_button.setFixedHeight(35)
-        debug_button.clicked.connect(self.debug_region_info)
-        button_layout.addWidget(debug_button)
-
         refresh_button = QPushButton("刷新预览")
         refresh_button.setFixedHeight(35)
         refresh_button.clicked.connect(self.update_preview)
@@ -413,8 +253,8 @@ class RegionEditorWindow(QDialog):
         # QRect: left()=col, top()=row, right()=col+width, bottom()=row+height
         start_row = current_rect.top()
         start_col = current_rect.left()
-        end_row = current_rect.bottom()
-        end_col = current_rect.right()
+        end_row = current_rect.top() + current_rect.height()
+        end_col = current_rect.left() + current_rect.width()
 
         # 获取图片统计信息
         vertical_images = self.get_vertical_images_in_region(current_rect)
@@ -451,7 +291,6 @@ class RegionEditorWindow(QDialog):
             start_col, start_row, end_col - start_col, end_row - start_row
         )
         self.grid_preview.set_selected_area(selected_rect)
-        self._auto_expand_for_vertical_images_silent()  # 自动检查竖屏图片
         self._update_status()
 
     def _move_up(self):
@@ -469,7 +308,7 @@ class RegionEditorWindow(QDialog):
         if new_rect.bottom() <= self.model.rows:
             self._update_spinboxes_from_rect(new_rect)
             self.grid_preview.set_selected_area(new_rect)
-            self._auto_expand_for_vertical_images_silent()  # 自动检查竖屏图片
+            self._auto_expand_for_vertical_images_silent()  # 移动操作需要自动检查竖屏图片
             self._update_status()
 
     def _move_down(self):
@@ -493,7 +332,7 @@ class RegionEditorWindow(QDialog):
 
         self._update_spinboxes_from_rect(new_rect)
         self.grid_preview.set_selected_area(new_rect)
-        self._auto_expand_for_vertical_images_silent()  # 自动检查竖屏图片
+        self._auto_expand_for_vertical_images_silent()  # 移动操作需要自动检查竖屏图片
         self._update_status()
 
     def _move_left(self):
@@ -511,7 +350,7 @@ class RegionEditorWindow(QDialog):
         if new_rect.right() <= self.model.cols:
             self._update_spinboxes_from_rect(new_rect)
             self.grid_preview.set_selected_area(new_rect)
-            self._auto_expand_for_vertical_images_silent()  # 自动检查竖屏图片
+            self._auto_expand_for_vertical_images_silent()  # 移动操作需要自动检查竖屏图片
             self._update_status()
 
     def _move_right(self):
@@ -535,7 +374,7 @@ class RegionEditorWindow(QDialog):
 
         self._update_spinboxes_from_rect(new_rect)
         self.grid_preview.set_selected_area(new_rect)
-        self._auto_expand_for_vertical_images_silent()  # 自动检查竖屏图片
+        self._auto_expand_for_vertical_images_silent()  # 移动操作需要自动检查竖屏图片
         self._update_status()
 
     def _update_spinboxes_from_rect(self, rect: QRect):
@@ -551,7 +390,6 @@ class RegionEditorWindow(QDialog):
         new_rect = QRect(col, row, 1, 1)
         self._update_spinboxes_from_rect(new_rect)
         self.grid_preview.set_selected_area(new_rect)
-        self._auto_expand_for_vertical_images_silent()  # 自动检查竖屏图片
         self._update_status()
 
     def _select_full_grid(self):
@@ -559,7 +397,7 @@ class RegionEditorWindow(QDialog):
         new_rect = QRect(0, 0, self.model.cols, self.model.rows)
         self._update_spinboxes_from_rect(new_rect)
         self.grid_preview.set_selected_area(new_rect)
-        self._auto_expand_for_vertical_images_silent()  # 自动检查竖屏图片
+        self._auto_expand_for_vertical_images_silent()  # 快速选择需要自动检查竖屏图片
         self._update_status()
 
     def _select_single_row(self):
@@ -569,7 +407,7 @@ class RegionEditorWindow(QDialog):
         new_rect = QRect(0, start_row, self.model.cols, 1)
         self._update_spinboxes_from_rect(new_rect)
         self.grid_preview.set_selected_area(new_rect)
-        self._auto_expand_for_vertical_images_silent()  # 自动检查竖屏图片
+        self._auto_expand_for_vertical_images_silent()  # 快速选择需要自动检查竖屏图片
         self._update_status()
 
     def _select_single_col(self):
@@ -579,7 +417,7 @@ class RegionEditorWindow(QDialog):
         new_rect = QRect(start_col, 0, 1, self.model.rows)
         self._update_spinboxes_from_rect(new_rect)
         self.grid_preview.set_selected_area(new_rect)
-        self._auto_expand_for_vertical_images_silent()  # 自动检查竖屏图片
+        self._auto_expand_for_vertical_images_silent()  # 快速选择需要自动检查竖屏图片
         self._update_status()
 
     def get_vertical_images_in_region(self, rect: QRect):
@@ -590,8 +428,8 @@ class RegionEditorWindow(QDialog):
 
         start_row = rect.top()
         start_col = rect.left()
-        end_row = rect.bottom()
-        end_col = rect.right()
+        end_row = rect.top() + rect.height()
+        end_col = rect.left() + rect.width()
 
         for row in range(start_row, end_row):
             for col in range(start_col, end_col):
@@ -626,8 +464,8 @@ class RegionEditorWindow(QDialog):
 
         start_row = rect.top()
         start_col = rect.left()
-        end_row = rect.bottom()
-        end_col = rect.right()
+        end_row = rect.top() + rect.height()
+        end_col = rect.left() + rect.width()
 
         for row in range(start_row, end_row):
             for col in range(start_col, end_col):
@@ -648,36 +486,6 @@ class RegionEditorWindow(QDialog):
                         }
                     )
         return horizontal_images
-
-    def debug_region_info(self):
-        """调试输出当前选中区域的详细信息"""
-        current_rect = self.grid_preview.selected_rect
-        if current_rect.isNull():
-            print("没有选中区域")
-            return
-
-        print("\n=== 区域信息调试 ===")
-        print(
-            f"选中区域: ({current_rect.left()}, {current_rect.top()}) 大小: {current_rect.width()}x{current_rect.height()}"
-        )
-
-        vertical_images = self.get_vertical_images_in_region(current_rect)
-        horizontal_images = self.get_horizontal_images_in_region(current_rect)
-
-        print(f"竖屏图片数量: {len(vertical_images)}")
-        for i, vimg in enumerate(vertical_images):
-            print(
-                f"  竖屏图片 {i+1}: 位置({vimg['row']}, {vimg['col']}) - {vimg['image'].path.name}"
-            )
-            print(f"    占用行: {vimg['start_row']}-{vimg['end_row']}")
-
-        print(f"横屏图片数量: {len(horizontal_images)}")
-        for i, himg in enumerate(horizontal_images):
-            print(
-                f"  横屏图片 {i+1}: 位置({himg['row']}, {himg['col']}) - {himg['image'].path.name}"
-            )
-
-        print("===================\n")
 
     def _auto_expand_for_vertical_images_silent(self):
         """静默自动扩展选中区域以包含完整的竖屏图片（不显示消息框）"""
@@ -731,11 +539,60 @@ class RegionEditorWindow(QDialog):
             QMessageBox.information(self, "提示", "请先选择一个区域")
             return
 
+        print("\n=== 智能扩展调试信息 ===")
+        print(
+            f"当前选中区域: 列{current_rect.left()}-行{current_rect.top()} 大小: {current_rect.width()}x{current_rect.height()}"
+        )
+
+        # 检查区域内所有格子的状态
+        print("区域内所有格子的状态:")
+        start_row = current_rect.top()
+        start_col = current_rect.left()
+        end_row = current_rect.top() + current_rect.height()
+        end_col = current_rect.left() + current_rect.width()
+
+        print(
+            f"检查范围: 行 {start_row} 到 {end_row-1} (包含), 列 {start_col} 到 {end_col-1} (包含)"
+        )
+
+        for row in range(start_row, end_row):
+            for col in range(start_col, end_col):
+                cell = self.model.get_cell(row, col)
+                if cell:
+                    if cell.is_occupied:
+                        if cell.image:
+                            print(
+                                f"  格子({row}, {col}): 已占用, {cell.image.orientation.value} - {cell.image.path.name}"
+                            )
+                            print(
+                                f"    is_main_cell: {cell.is_main_cell}, main_position: {cell.main_position}"
+                            )
+                        else:
+                            print(f"  格子({row}, {col}): 已占用但无图片信息")
+                    else:
+                        print(f"  格子({row}, {col}): 空闲")
+
         # 获取选中区域内的所有竖屏图片
         vertical_images = self.get_vertical_images_in_region(current_rect)
+        horizontal_images = self.get_horizontal_images_in_region(current_rect)
+
+        print(f"竖屏图片数量: {len(vertical_images)}")
+        for i, vimg in enumerate(vertical_images):
+            print(
+                f"  竖屏图片 {i+1}: 位置({vimg['row']}, {vimg['col']}) - {vimg['image'].path.name}"
+            )
+            print(f"    占用行: {vimg['start_row']}-{vimg['end_row']}")
+
+        print(f"横屏图片数量: {len(horizontal_images)}")
+        for i, himg in enumerate(horizontal_images):
+            print(
+                f"  横屏图片 {i+1}: 位置({himg['row']}, {himg['col']}) - {himg['image'].path.name}"
+            )
 
         if not vertical_images:
+            print("没有找到竖屏图片，无需扩展")
             QMessageBox.information(self, "提示", "选中区域内没有竖屏图片")
+            print("===================\n")
             return
 
         # 计算需要扩展的边界
@@ -744,25 +601,54 @@ class RegionEditorWindow(QDialog):
         new_left = current_rect.left()
         new_right = current_rect.right()
 
+        print(
+            f"原始边界: top={new_top}, bottom={new_bottom}, left={new_left}, right={new_right}"
+        )
+
+        expansion_needed = False
         for vimg in vertical_images:
             img_top = vimg["start_row"]
             img_bottom = vimg["end_row"]
 
-            # 扩展区域以包含完整的竖屏图片
-            new_top = min(new_top, img_top)
-            new_bottom = max(new_bottom, img_bottom)
+            print(
+                f"竖屏图片 {vimg['image'].path.name}: 需要占用行 {img_top}-{img_bottom}"
+            )
+
+            # 检查是否需要扩展
+            if img_top < new_top or img_bottom > new_bottom:
+                expansion_needed = True
+                old_top, old_bottom = new_top, new_bottom
+                new_top = min(new_top, img_top)
+                new_bottom = max(new_bottom, img_bottom)
+                print(
+                    f"  需要扩展: 从 ({old_top}-{old_bottom}) 扩展到 ({new_top}-{new_bottom})"
+                )
+
+        if not expansion_needed:
+            print("所有竖屏图片都已完整包含在选中区域内，无需扩展")
+            QMessageBox.information(self, "提示", "选中区域已包含所有完整的竖屏图片")
+            print("===================\n")
+            return
 
         # 确保不超出网格范围
         new_top = max(0, new_top)
         new_bottom = min(self.model.rows, new_bottom)
 
+        print(
+            f"最终边界: top={new_top}, bottom={new_bottom}, left={new_left}, right={new_right}"
+        )
+
         # 创建新的矩形
         new_rect = QRect(new_left, new_top, new_right - new_left, new_bottom - new_top)
+
+        print(f"新区域大小: {new_rect.width()}x{new_rect.height()}")
 
         # 更新显示
         self._update_spinboxes_from_rect(new_rect)
         self.grid_preview.set_selected_area(new_rect)
         self._update_status()
+
+        print("===================\n")
 
         QMessageBox.information(
             self,
@@ -776,11 +662,17 @@ class RegionEditorWindow(QDialog):
         if current_rect.isNull():
             return
 
+        # 在清空之前先自动扩展选择区域以包含完整的竖屏图片
+        self._auto_expand_for_vertical_images_silent()
+        
+        # 重新获取扩展后的区域
+        current_rect = self.grid_preview.selected_rect
+
         # 显示确认对话框
         reply = QMessageBox.question(
             self,
             "确认清空",
-            f"确定要清空区域 ({current_rect.top()},{current_rect.left()}) - ({current_rect.bottom()-1},{current_rect.right()-1}) 吗？",
+            f"确定要清空区域 ({current_rect.top()},{current_rect.left()}) - ({current_rect.top() + current_rect.height() - 1},{current_rect.left() + current_rect.width() - 1}) 吗？",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No,
         )
@@ -789,8 +681,8 @@ class RegionEditorWindow(QDialog):
             # 清除该区域内的所有图片
             start_row = current_rect.top()
             start_col = current_rect.left()
-            end_row = current_rect.bottom()
-            end_col = current_rect.right()
+            end_row = current_rect.top() + current_rect.height()
+            end_col = current_rect.left() + current_rect.width()
 
             for row in range(start_row, end_row):
                 for col in range(start_col, end_col):

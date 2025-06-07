@@ -175,25 +175,20 @@ class PuzzleModel:
         loaded_count = 0
 
         if not directory.exists() or not directory.is_dir():
-            return loaded_count
-
-        # 保存图片目录路径
+            return loaded_count  # 保存图片目录路径
         self.image_directory = directory
 
         for file_path in directory.iterdir():
             if file_path.suffix.lower() in config.SUPPORTED_IMAGE_FORMATS:
                 try:
                     with Image.open(file_path) as img:
-                        width, height = img.size
-                        aspect_ratio = width / height
-
-                        # 判断图片方向（基于16:9比例）
-                        if abs(aspect_ratio - config.IMAGE_ASPECT_RATIO) < 0.1:
+                        width, height = img.size  # 判断图片方向（简单的宽高比较）
+                        if width > height:
                             orientation = ImageOrientation.HORIZONTAL
-                        elif abs(aspect_ratio - (1 / config.IMAGE_ASPECT_RATIO)) < 0.1:
+                        elif height > width:
                             orientation = ImageOrientation.VERTICAL
                         else:
-                            continue  # 跳过不符合16:9比例的图片
+                            continue  # 跳过正方形图片
 
                         image_info = ImageInfo(
                             path=file_path,
