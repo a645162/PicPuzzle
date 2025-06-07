@@ -40,3 +40,6 @@ SUPPORTED_IMAGE_FORMATS = [".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif"]
 # 图片比例（16:9）
 IMAGE_ASPECT_RATIO = 16 / 9  # 横屏比例 ≈ 1.778
 VERTICAL_ASPECT_RATIO = 9 / 16  # 竖屏比例 ≈ 0.5625
+
+# Area
+AREA_SELECT_MAIN_POSITION = False

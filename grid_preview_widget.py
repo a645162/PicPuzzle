@@ -5,7 +5,10 @@
 from PySide6.QtWidgets import QWidget
 from PySide6.QtCore import Qt, QRect, Signal
 from PySide6.QtGui import QPainter, QColor, QPen, QMouseEvent, QFont
+
 from models import PuzzleModel, ImageOrientation
+
+from config import AREA_SELECT_MAIN_POSITION
 
 # ========== 常量配置 ==========
 
@@ -66,8 +69,7 @@ class GridPreviewWidget(QWidget):
             f"background-color: {GRID_BACKGROUND_COLOR}; border: 1px solid {GRID_BORDER_COLOR};"
         )
         self.setMinimumSize(
-            GRID_MIN_WIDTH + ROW_COL_LABEL_WIDTH, 
-            GRID_MIN_HEIGHT + ROW_COL_LABEL_HEIGHT
+            GRID_MIN_WIDTH + ROW_COL_LABEL_WIDTH, GRID_MIN_HEIGHT + ROW_COL_LABEL_HEIGHT
         )  # 设置最小尺寸，考虑行号列号区域
 
     def _get_grid_rect(self):
@@ -76,14 +78,14 @@ class GridPreviewWidget(QWidget):
             ROW_COL_LABEL_WIDTH,
             ROW_COL_LABEL_HEIGHT,
             self.width() - ROW_COL_LABEL_WIDTH,
-            self.height() - ROW_COL_LABEL_HEIGHT
+            self.height() - ROW_COL_LABEL_HEIGHT,
         )
 
     def paintEvent(self, event):
         """绘制网格和选中区域"""
         super().paintEvent(event)
         painter = QPainter(self)
-        
+
         # 设置字体
         font = QFont()
         font.setPointSize(ROW_COL_FONT_SIZE)
@@ -91,7 +93,7 @@ class GridPreviewWidget(QWidget):
 
         # 获取实际网格区域
         grid_rect = self._get_grid_rect()
-        
+
         # 计算每个单元格的大小
         cell_width = grid_rect.width() / self.model.cols
         cell_height = grid_rect.height() / self.model.rows
@@ -99,15 +101,19 @@ class GridPreviewWidget(QWidget):
         # 绘制行号列号标注背景
         painter.setBrush(ROW_COL_LABEL_BACKGROUND)
         painter.setPen(QPen(GRID_OUTLINE_COLOR, GRID_LINE_WIDTH))
-        
+
         # 左上角空白区域
         painter.drawRect(0, 0, ROW_COL_LABEL_WIDTH, ROW_COL_LABEL_HEIGHT)
-        
+
         # 列号标注背景
-        painter.drawRect(ROW_COL_LABEL_WIDTH, 0, grid_rect.width(), ROW_COL_LABEL_HEIGHT)
-        
+        painter.drawRect(
+            ROW_COL_LABEL_WIDTH, 0, grid_rect.width(), ROW_COL_LABEL_HEIGHT
+        )
+
         # 行号标注背景
-        painter.drawRect(0, ROW_COL_LABEL_HEIGHT, ROW_COL_LABEL_WIDTH, grid_rect.height())
+        painter.drawRect(
+            0, ROW_COL_LABEL_HEIGHT, ROW_COL_LABEL_WIDTH, grid_rect.height()
+        )
 
         # 绘制列号
         painter.setPen(QPen(ROW_COL_LABEL_COLOR, 1))
@@ -174,7 +180,7 @@ class GridPreviewWidget(QWidget):
         # 绘制网格线
         painter.setBrush(QColor(0, 0, 0, 0))  # 透明填充
         painter.setPen(QPen(GRID_OUTLINE_COLOR, GRID_LINE_WIDTH))
-        
+
         # 绘制水平网格线
         for row in range(self.model.rows + 1):
             y = grid_rect.y() + row * cell_height
@@ -206,7 +212,7 @@ class GridPreviewWidget(QWidget):
         if event.button() == Qt.LeftButton:
             # 获取实际网格区域
             grid_rect = self._get_grid_rect()
-            
+
             # 检查点击是否在网格区域内
             if not grid_rect.contains(event.position().toPoint()):
                 super().mousePressEvent(event)
@@ -215,7 +221,7 @@ class GridPreviewWidget(QWidget):
             # 计算点击的格子位置（相对于网格区域）
             click_x = event.position().x() - grid_rect.x()
             click_y = event.position().y() - grid_rect.y()
-            
+
             cell_width = grid_rect.width() / self.model.cols
             cell_height = grid_rect.height() / self.model.rows
 
@@ -224,10 +230,18 @@ class GridPreviewWidget(QWidget):
 
             # 确保坐标在有效范围内
             if 0 <= row < self.model.rows and 0 <= col < self.model.cols:
-                # 设置为1x1的选择区域，使用(left, top, width, height)格式
-                # 这里left=col, top=row
-                new_rect = QRect(col, row, 1, 1)
+                final_row, final_col = row, col
+                if AREA_SELECT_MAIN_POSITION:
+                    # 获取主格子位置（如果点击的是竖屏图片的非主格子，会返回主格子的位置）
+                    main_row, main_col = self.model.get_main_cell_position(row, col)
+
+                    # 设置为1x1的选择区域，使用(left, top, width, height)格式
+                    # 这里left=col, top=row，但要使用主格子的位置
+
+                    final_row, final_col = main_row, main_col
+
+                new_rect = QRect(final_col, final_row, 1, 1)
                 self.set_selected_area(new_rect)
-                self.area_selected.emit(row, col)
+                self.area_selected.emit(final_row, final_col)
 
         super().mousePressEvent(event)

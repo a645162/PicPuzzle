@@ -151,9 +151,7 @@ class PuzzleModel:
                     self.grid[r][c].image = None
                     self.grid[r][c].is_occupied = False
                     self.grid[r][c].is_main_cell = True
-                    self.grid[r][c].main_position = None
-
-        # 移动到未使用列表
+                    self.grid[r][c].main_position = None  # 移动到未使用列表
         if image in self.used_images:
             self.used_images.remove(image)
         if image not in self.unused_images:
@@ -166,6 +164,20 @@ class PuzzleModel:
         if row < 0 or row >= self.rows or col < 0 or col >= self.cols:
             return None
         return self.grid[row][col]
+
+    def get_main_cell_position(self, row: int, col: int) -> tuple[int, int]:
+        """
+        获取指定位置对应的主格子位置
+        如果是竖屏图片的非主格子，则返回其main_position
+        如果是主格子或横屏图片，则返回自身位置
+        """
+        cell = self.get_cell(row, col)
+        if cell and cell.is_occupied and cell.main_position is not None:
+            # 这是竖屏图片的非主格子，返回主格子位置
+            return cell.main_position
+        else:
+            # 这是主格子或空格子，返回自身位置
+            return (row, col)
 
     def load_images_from_directory(self, directory: Path) -> int:
         """从目录加载图片"""
