@@ -62,11 +62,23 @@ class PreviewWindow(QDialog):
 
         # 控制选项
         control_layout = QHBoxLayout()
+
         self.show_grid_checkbox = QCheckBox("显示网格")
         self.show_grid_checkbox.setChecked(True)  # 默认显示网格
         self.show_grid_checkbox.stateChanged.connect(self.update_preview)
         control_layout.addWidget(self.show_grid_checkbox)
-        control_layout.addStretch()  # 添加弹簧使复选框左对齐
+
+        # 添加间隔设置
+        control_layout.addWidget(QLabel("间隔:"))
+        self.spacing_spinbox = QSpinBox()
+        self.spacing_spinbox.setRange(-1, 1000)
+        self.spacing_spinbox.setValue(-1)  # 默认自动计算
+        self.spacing_spinbox.setSpecialValueText("自动计算")
+        self.spacing_spinbox.setSuffix(" px")
+        self.spacing_spinbox.valueChanged.connect(self.update_preview)
+        control_layout.addWidget(self.spacing_spinbox)
+
+        control_layout.addStretch()  # 添加弹簧使控件左对齐
         layout.addLayout(control_layout)
 
         # 滚动区域
@@ -118,7 +130,7 @@ class PreviewWindow(QDialog):
         dialog = ExportDialog(self.model, self)
 
         if dialog.exec() == QDialog.Accepted:
-            cell_width, cell_height = dialog.get_output_size()
+            cell_width, cell_height, custom_spacing = dialog.get_export_settings()
 
             # 选择保存位置
             save_path, _ = QFileDialog.getSaveFileName(
@@ -131,7 +143,9 @@ class PreviewWindow(QDialog):
             if save_path:
                 try:
                     exporter = PuzzleExporter(self.model)
-                    exporter.export_to_file(save_path, cell_width, cell_height)
+                    exporter.export_to_file(
+                        save_path, cell_width, cell_height, custom_spacing
+                    )
                     QMessageBox.information(
                         self, "导出成功", f"拼图已保存到: {save_path}"
                     )
@@ -156,12 +170,17 @@ class PreviewWindow(QDialog):
                 else:
                     area_info = "无图片"
 
-                # 添加网格状态信息
+                # 添加网格状态和间隔信息
                 grid_status = (
                     "显示网格" if self.show_grid_checkbox.isChecked() else "隐藏网格"
                 )
+                spacing_value = self.spacing_spinbox.value()
+                spacing_info = (
+                    "自动间隔" if spacing_value == -1 else f"{spacing_value}px间隔"
+                )
+
                 self.info_label.setText(
-                    f"预览尺寸: {size.width()}x{size.height()} | {area_info} | {grid_status}"
+                    f"预览尺寸: {size.width()}x{size.height()} | {area_info} | {grid_status} | {spacing_info}"
                 )
             else:
                 self.preview_label.setText("没有图片可预览")
@@ -180,9 +199,18 @@ class PreviewWindow(QDialog):
         show_grid = self.show_grid_checkbox.isChecked()
         bg_color = Qt.lightGray if show_grid else Qt.white
 
+        # 获取自定义间隔设置
+        custom_spacing = (
+            self.spacing_spinbox.value() if self.spacing_spinbox.value() != -1 else None
+        )
+
         # 使用导出器生成预览图片
         return self.exporter.create_puzzle_image(
-            cell_width, cell_height, bg_color=bg_color, draw_grid=show_grid
+            cell_width,
+            cell_height,
+            bg_color=bg_color,
+            draw_grid=show_grid,
+            custom_spacing=custom_spacing,
         )
 
 
@@ -218,12 +246,24 @@ class ExportDialog(QDialog):
 
         layout.addLayout(size_layout)
 
+        # 间隔设置
+        spacing_layout = QHBoxLayout()
+        spacing_layout.addWidget(QLabel("图片间隔:"))
+
+        self.spacing_spinbox = QSpinBox()
+        self.spacing_spinbox.setRange(-1, 1000)
+        self.spacing_spinbox.setValue(-1)  # 默认自动计算
+        self.spacing_spinbox.setSpecialValueText("自动计算")
+        self.spacing_spinbox.setSuffix(" px")
+        spacing_layout.addWidget(self.spacing_spinbox)
+        spacing_layout.addStretch()
+
+        layout.addLayout(spacing_layout)
+
         # 预览信息
-        info_label = QLabel()
-        total_width = self.width_spinbox.value() * self.model.cols
-        total_height = self.height_spinbox.value() * self.model.rows
-        info_label.setText(f"总输出尺寸: {total_width} x {total_height}")
-        layout.addWidget(info_label)
+        self.info_label = QLabel()
+        self._update_info()
+        layout.addWidget(self.info_label)
 
         # 按钮
         button_layout = QHBoxLayout()
@@ -239,17 +279,26 @@ class ExportDialog(QDialog):
         layout.addLayout(button_layout)
 
         # 连接信号更新预览
-        self.width_spinbox.valueChanged.connect(
-            lambda: info_label.setText(
-                f"总输出尺寸: {self.width_spinbox.value() * self.model.cols} x {self.height_spinbox.value() * self.model.rows}"
-            )
+        self.width_spinbox.valueChanged.connect(self._update_info)
+        self.height_spinbox.valueChanged.connect(self._update_info)
+        self.spacing_spinbox.valueChanged.connect(self._update_info)
+
+    def _update_info(self):
+        """更新信息显示"""
+        total_width = self.width_spinbox.value() * self.model.cols
+        total_height = self.height_spinbox.value() * self.model.rows
+        spacing_text = (
+            "自动间隔"
+            if self.spacing_spinbox.value() == -1
+            else f"{self.spacing_spinbox.value()}px间隔"
         )
-        self.height_spinbox.valueChanged.connect(
-            lambda: info_label.setText(
-                f"总输出尺寸: {self.width_spinbox.value() * self.model.cols} x {self.height_spinbox.value() * self.model.rows}"
-            )
+        self.info_label.setText(
+            f"总输出尺寸: {total_width} x {total_height} | {spacing_text}"
         )
 
-    def get_output_size(self):
-        """获取输出尺寸"""
-        return self.width_spinbox.value(), self.height_spinbox.value()
+    def get_export_settings(self):
+        """获取导出设置"""
+        custom_spacing = (
+            self.spacing_spinbox.value() if self.spacing_spinbox.value() != -1 else None
+        )
+        return self.width_spinbox.value(), self.height_spinbox.value(), custom_spacing
