@@ -23,6 +23,7 @@ from grid_widget import GridWidget
 from image_list_widget import ImageListWidget
 from state_manager import StateManager
 from preview_window import PreviewWindow
+from region_editor_window import RegionEditorWindow
 
 
 class MainWindow(QMainWindow):
@@ -30,6 +31,7 @@ class MainWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
+
         self.model = PuzzleModel(config.DEFAULT_GRID_ROWS, config.DEFAULT_GRID_COLS)
         self.state_manager = StateManager()
         self.is_modified = False  # 添加修改状态标记
@@ -126,6 +128,15 @@ class MainWindow(QMainWindow):
         about_action = QAction("关于(&A)", self)
         about_action.triggered.connect(self._show_about)
         help_menu.addAction(about_action)
+
+        # 新增区域编辑菜单项
+        # 区域编辑菜单
+        region_menu = menubar.addMenu("区域(&R)")
+
+        edit_region_action = QAction("区域编辑(&R)", self)
+        edit_region_action.setShortcut("Ctrl+R")
+        edit_region_action.triggered.connect(self._show_region_editor)
+        region_menu.addAction(edit_region_action)
 
     def setup_status_bar(self):
         """设置状态栏"""
@@ -518,3 +529,11 @@ class MainWindow(QMainWindow):
         preview_window.show()
         preview_window.raise_()  # 将窗口提到前台
         preview_window.activateWindow()  # 激活窗口
+
+    def _show_region_editor(self):
+        """显示区域编辑窗口"""
+        if not hasattr(self, "region_editor") or not self.region_editor:
+            self.region_editor = RegionEditorWindow(self.model, self)
+        self.region_editor.show()
+        self.region_editor.raise_()  # 将窗口提到前台
+        self.region_editor.activateWindow()  # 激活窗口

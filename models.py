@@ -37,6 +37,9 @@ class GridCell:
     image: Optional[ImageInfo] = None
     is_occupied: bool = False
     is_main_cell: bool = True  # 是否是主单元格（对于竖屏图片，只有左上角是主单元格）
+    main_position: Optional[tuple] = (
+        None  # 如果是竖屏图片的占位格子，存储主格子的坐标 (row, col)
+    )
 
     def __post_init__(self):
         self.id = f"{self.row}_{self.col}"
@@ -109,12 +112,18 @@ class PuzzleModel:
             self.grid[row][col].image = image
             self.grid[row][col].is_occupied = True
             self.grid[row][col].is_main_cell = True
+            self.grid[row][col].main_position = None  # 横屏图片无需main_position
         else:
             # 竖屏图片占3个格子
             for i in range(3):
                 self.grid[row + i][col].image = image
                 self.grid[row + i][col].is_occupied = True
                 self.grid[row + i][col].is_main_cell = i == 0  # 只有第一个是主单元格
+                # 为非主格子设置main_position指向主格子
+                if i == 0:
+                    self.grid[row + i][col].main_position = None  # 主格子自身
+                else:
+                    self.grid[row + i][col].main_position = (row, col)  # 指向主格子
 
         # 移动到已使用列表
         if image in self.unused_images:
@@ -142,6 +151,7 @@ class PuzzleModel:
                     self.grid[r][c].image = None
                     self.grid[r][c].is_occupied = False
                     self.grid[r][c].is_main_cell = True
+                    self.grid[r][c].main_position = None
 
         # 移动到未使用列表
         if image in self.used_images:
