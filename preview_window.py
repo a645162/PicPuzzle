@@ -68,6 +68,11 @@ class PreviewWindow(QDialog):
         self.show_grid_checkbox.stateChanged.connect(self.update_preview)
         control_layout.addWidget(self.show_grid_checkbox)
 
+        self.auto_scale_checkbox = QCheckBox("自动缩放")
+        self.auto_scale_checkbox.setChecked(True)  # 默认启用自动缩放
+        self.auto_scale_checkbox.stateChanged.connect(self.update_preview)
+        control_layout.addWidget(self.auto_scale_checkbox)
+
         # 添加间隔设置
         control_layout.addWidget(QLabel("间隔:"))
         self.spacing_spinbox = QSpinBox()
@@ -93,7 +98,11 @@ class PreviewWindow(QDialog):
         self.preview_label.setAlignment(Qt.AlignCenter)
         self.preview_label.setMinimumSize(200, 200)
         self.preview_label.setStyleSheet("background-color: white; margin: 10px;")
+        self.preview_label.setScaledContents(False)  # 手动控制缩放
         scroll_area.setWidget(self.preview_label)
+
+        # 保存滚动区域引用用于自动缩放
+        self.scroll_area = scroll_area
 
         # 按钮
         button_layout = QHBoxLayout()
@@ -157,10 +166,17 @@ class PreviewWindow(QDialog):
         try:
             preview_pixmap = self._create_preview_image()
             if preview_pixmap and not preview_pixmap.isNull():
-                self.preview_label.setPixmap(preview_pixmap)
+                # 根据复选框状态决定是否自动缩放
+                if self.auto_scale_checkbox.isChecked():
+                    scaled_pixmap = self._scale_pixmap_to_fit(preview_pixmap)
+                else:
+                    scaled_pixmap = preview_pixmap
+
+                self.preview_label.setPixmap(scaled_pixmap)
 
                 # 更新信息
                 size = preview_pixmap.size()
+                scaled_size = scaled_pixmap.size()
                 valid_area = self.exporter.get_valid_area()
                 if valid_area:
                     min_row, max_row, min_col, max_col = valid_area
@@ -179,15 +195,77 @@ class PreviewWindow(QDialog):
                     "自动间隔" if spacing_value == -1 else f"{spacing_value}px间隔"
                 )
 
-                self.info_label.setText(
-                    f"预览尺寸: {size.width()}x{size.height()} | {area_info} | {grid_status} | {spacing_info}"
-                )
+                # 显示原始尺寸和缩放后尺寸
+                if self.auto_scale_checkbox.isChecked() and scaled_size != size:
+                    scale_ratio = (
+                        scaled_size.width() / size.width() if size.width() > 0 else 1
+                    )
+                    info_parts = [
+                        f"原始: {size.width()}x{size.height()}",
+                        f"显示: {scaled_size.width()}x{scaled_size.height()}",
+                        f"缩放: {scale_ratio:.2f}",
+                        area_info,
+                        grid_status,
+                        spacing_info,
+                    ]
+                else:
+                    info_parts = [
+                        f"尺寸: {size.width()}x{size.height()}",
+                        area_info,
+                        grid_status,
+                        spacing_info,
+                    ]
+
+                self.info_label.setText(" | ".join(info_parts))
             else:
                 self.preview_label.setText("没有图片可预览")
                 self.info_label.setText("请先在网格中放置图片")
         except Exception as e:
             self.preview_label.setText(f"预览失败: {e}")
             self.info_label.setText("预览生成失败")
+
+    def resizeEvent(self, event):
+        """窗口大小变化时重新缩放预览图片"""
+        super().resizeEvent(event)
+        # 延迟更新预览，避免在调整大小过程中频繁重绘
+        if hasattr(self, "preview_label"):
+            self.update_preview()
+
+    def _scale_pixmap_to_fit(self, pixmap):
+        """将图片按比例缩放以适应滚动区域"""
+        if not pixmap or pixmap.isNull():
+            return pixmap
+
+        # 获取滚动区域的可用尺寸（减去边距和滚动条空间）
+        available_size = self.scroll_area.size()
+        margin = 40  # 留出一些边距
+        max_width = available_size.width() - margin
+        max_height = available_size.height() - margin
+
+        # 确保最小尺寸
+        max_width = max(200, max_width)
+        max_height = max(200, max_height)
+
+        # 获取原始图片尺寸
+        original_size = pixmap.size()
+
+        # 如果图片小于可用空间，则不放大，保持原始尺寸
+        if original_size.width() <= max_width and original_size.height() <= max_height:
+            return pixmap
+
+        # 计算缩放比例，保持宽高比
+        width_ratio = max_width / original_size.width()
+        height_ratio = max_height / original_size.height()
+        scale_ratio = min(width_ratio, height_ratio)
+
+        # 计算新的尺寸
+        new_width = int(original_size.width() * scale_ratio)
+        new_height = int(original_size.height() * scale_ratio)
+
+        # 缩放图片
+        return pixmap.scaled(
+            new_width, new_height, Qt.KeepAspectRatio, Qt.SmoothTransformation
+        )
 
     def _create_preview_image(self):
         """创建预览图片"""
