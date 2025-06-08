@@ -21,10 +21,60 @@ import config
 from models import PuzzleModel, ImageInfo, ImageOrientation
 
 
+class RulerLabel(QLabel):
+    """标尺标签组件"""
+
+    def __init__(self, text: str, is_horizontal: bool = True, parent=None):
+        super().__init__(parent)
+        self.setText(text)
+        self.is_horizontal = is_horizontal
+        self.is_highlighted = False
+
+        if is_horizontal:
+            self.setFixedSize(config.PREVIEW_CELL_WIDTH, 30)
+        else:
+            self.setFixedSize(30, config.PREVIEW_CELL_HEIGHT)
+
+        self.setAlignment(Qt.AlignCenter)
+        self.update_style()
+
+    def set_highlighted(self, highlighted: bool):
+        """设置高亮状态"""
+        if self.is_highlighted != highlighted:
+            self.is_highlighted = highlighted
+            self.update_style()
+
+    def update_style(self):
+        """更新样式"""
+        if self.is_highlighted:
+            self.setStyleSheet(
+                """
+                QLabel {
+                    border: 1px solid #0078d4;
+                    background-color: #e3f2fd;
+                    color: #0078d4;
+                    font-weight: bold;
+                }
+            """
+            )
+        else:
+            self.setStyleSheet(
+                """
+                QLabel {
+                    border: 1px solid #cccccc;
+                    background-color: #f8f8f8;
+                    color: #666666;
+                }
+            """
+            )
+
+
 class GridCellWidget(QLabel):
     """网格单元格组件"""
 
     clicked = Signal(int, int)  # 点击信号，传递行列坐标
+    mouse_entered = Signal(int, int)  # 鼠标进入信号
+    mouse_left = Signal()  # 鼠标离开信号
 
     def __init__(self, row: int, col: int, parent=None):
         super().__init__(parent)
@@ -46,12 +96,24 @@ class GridCellWidget(QLabel):
         self.setAlignment(Qt.AlignCenter)
         self.setText(f"({row}, {col})")
         self.setScaledContents(True)
+        # 启用鼠标跟踪
+        self.setMouseTracking(True)
 
     def mousePressEvent(self, event):
         """鼠标点击事件"""
         if event.button() == Qt.LeftButton:
             self.clicked.emit(self.row, self.col)
         super().mousePressEvent(event)
+
+    def enterEvent(self, event):
+        """鼠标进入事件"""
+        self.mouse_entered.emit(self.row, self.col)
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        """鼠标离开事件"""
+        self.mouse_left.emit()
+        super().leaveEvent(event)
 
     def set_image(self, image_info: Optional[ImageInfo], is_main_cell: bool = True):
         """设置图片"""
@@ -153,7 +215,11 @@ class GridWidget(QWidget):
         super().__init__(parent)
         self.model = model
         self.cells = []
+        self.row_rulers = []  # 行标尺
+        self.col_rulers = []  # 列标尺
         self.grid_layout = None
+        self.current_highlight_row = -1
+        self.current_highlight_col = -1
         self.setup_ui()
         self.update_grid()
 
@@ -232,14 +298,43 @@ class GridWidget(QWidget):
         self.grid_layout.setSpacing(spacing)
 
         self.cells = []
+        self.row_rulers = []
+        self.col_rulers = []
 
-        # 创建网格单元格
+        # 创建左上角空白区域
+        corner_label = QLabel()
+        corner_label.setFixedSize(30, 30)
+        corner_label.setStyleSheet(
+            """
+            QLabel {
+                border: 1px solid #cccccc;
+                background-color: #f8f8f8;
+            }
+        """
+        )
+        self.grid_layout.addWidget(corner_label, 0, 0)
+
+        # 创建列标尺（顶部）
+        for col in range(self.model.cols):
+            col_ruler = RulerLabel(str(col), is_horizontal=True)
+            self.col_rulers.append(col_ruler)
+            self.grid_layout.addWidget(col_ruler, 0, col + 1)
+
+        # 创建行标尺和网格单元格
         for row in range(self.model.rows):
+            # 创建行标尺（左侧）
+            row_ruler = RulerLabel(str(row), is_horizontal=False)
+            self.row_rulers.append(row_ruler)
+            self.grid_layout.addWidget(row_ruler, row + 1, 0)
+
+            # 创建该行的单元格
             cell_row = []
             for col in range(self.model.cols):
                 cell_widget = GridCellWidget(row, col)
                 cell_widget.clicked.connect(self._on_cell_clicked)
-                self.grid_layout.addWidget(cell_widget, row, col)
+                cell_widget.mouse_entered.connect(self._on_cell_mouse_entered)
+                cell_widget.mouse_left.connect(self._on_cell_mouse_left)
+                self.grid_layout.addWidget(cell_widget, row + 1, col + 1)
                 cell_row.append(cell_widget)
             self.cells.append(cell_row)
 
@@ -249,6 +344,46 @@ class GridWidget(QWidget):
     def _on_cell_clicked(self, row: int, col: int):
         """单元格点击处理"""
         self.cell_clicked.emit(row, col)
+
+    def _on_cell_mouse_entered(self, row: int, col: int):
+        """单元格鼠标进入处理"""
+        self._highlight_rulers(row, col)
+
+    def _on_cell_mouse_left(self):
+        """单元格鼠标离开处理"""
+        self._clear_ruler_highlights()
+
+    def _highlight_rulers(self, row: int, col: int):
+        """高亮指定行列的标尺"""
+        # 清除之前的高亮
+        self._clear_ruler_highlights()
+
+        # 高亮新的行列
+        self.current_highlight_row = row
+        self.current_highlight_col = col
+
+        if 0 <= row < len(self.row_rulers):
+            self.row_rulers[row].set_highlighted(True)
+
+        if 0 <= col < len(self.col_rulers):
+            self.col_rulers[col].set_highlighted(True)
+
+    def _clear_ruler_highlights(self):
+        """清除所有标尺高亮"""
+        # 清除行标尺高亮
+        if self.current_highlight_row >= 0 and self.current_highlight_row < len(
+            self.row_rulers
+        ):
+            self.row_rulers[self.current_highlight_row].set_highlighted(False)
+
+        # 清除列标尺高亮
+        if self.current_highlight_col >= 0 and self.current_highlight_col < len(
+            self.col_rulers
+        ):
+            self.col_rulers[self.current_highlight_col].set_highlighted(False)
+
+        self.current_highlight_row = -1
+        self.current_highlight_col = -1
 
     def refresh_display(self):
         """刷新显示"""
