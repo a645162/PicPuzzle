@@ -30,10 +30,18 @@ class RulerLabel(QLabel):
         self.is_horizontal = is_horizontal
         self.is_highlighted = False
 
-        if is_horizontal:
-            self.setFixedSize(config.PREVIEW_CELL_WIDTH, 30)
-        else:
-            self.setFixedSize(30, config.PREVIEW_CELL_HEIGHT)
+        # if is_horizontal:
+        #     self.setFixedSize(config.PREVIEW_CELL_WIDTH, 30)
+        # else:
+        #     self.setFixedSize(30, config.PREVIEW_CELL_HEIGHT)
+
+        # # 标尺不使用固定尺寸，而是根据可用空间平均分布
+        # if is_horizontal:
+        #     self.setMinimumHeight(25)
+        #     self.setMaximumHeight(30)
+        # else:
+        #     self.setMinimumWidth(25)
+        #     self.setMaximumWidth(30)
 
         self.setAlignment(Qt.AlignCenter)
         self.update_style()
