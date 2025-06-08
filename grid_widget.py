@@ -253,7 +253,39 @@ class GridWidget(QWidget):
         control_panel.addWidget(clear_button)
         layout.addLayout(control_panel)
 
-        # 创建滚动区域
+        # 创建固定标尺的网格布局
+        grid_layout = QGridLayout()
+        grid_layout.setSpacing(0)
+        grid_layout.setContentsMargins(0, 0, 0, 0)
+
+        # 左上角空白区域
+        self.corner_widget = QLabel()
+        self.corner_widget.setFixedSize(30, 30)
+        self.corner_widget.setStyleSheet(
+            """
+            QLabel {
+                border: 1px solid #cccccc;
+                background-color: #f8f8f8;
+            }
+        """
+        )
+        grid_layout.addWidget(self.corner_widget, 0, 0)
+
+        # 顶部列标尺容器
+        self.top_ruler_container = QWidget()
+        self.top_ruler_layout = QHBoxLayout(self.top_ruler_container)
+        self.top_ruler_layout.setSpacing(0)
+        self.top_ruler_layout.setContentsMargins(0, 0, 0, 0)
+        grid_layout.addWidget(self.top_ruler_container, 0, 1)
+
+        # 左侧行标尺容器
+        self.left_ruler_container = QWidget()
+        self.left_ruler_layout = QVBoxLayout(self.left_ruler_container)
+        self.left_ruler_layout.setSpacing(0)
+        self.left_ruler_layout.setContentsMargins(0, 0, 0, 0)
+        grid_layout.addWidget(self.left_ruler_container, 1, 0)
+
+        # 创建滚动区域（只包含网格单元格）
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
@@ -263,7 +295,13 @@ class GridWidget(QWidget):
         self.grid_container = QWidget()
         self.scroll_area.setWidget(self.grid_container)
 
-        layout.addWidget(self.scroll_area)
+        grid_layout.addWidget(self.scroll_area, 1, 1)
+
+        # 设置列伸展
+        grid_layout.setColumnStretch(1, 1)
+        grid_layout.setRowStretch(1, 1)
+
+        layout.addLayout(grid_layout)
 
     def _on_grid_size_changed(self):
         """网格大小改变"""
@@ -281,7 +319,7 @@ class GridWidget(QWidget):
 
     def update_grid(self):
         """更新网格显示"""
-        # 清除旧的网格
+        # 清除旧的网格单元格
         if self.grid_layout:
             while self.grid_layout.count():
                 child = self.grid_layout.takeAt(0)
@@ -290,56 +328,63 @@ class GridWidget(QWidget):
             if self.grid_container.layout():
                 self.grid_container.layout().deleteLater()
 
-        # 创建新的网格布局
-        self.grid_layout = QGridLayout(self.grid_container)
+        # 清除旧的标尺
+        self._clear_rulers()
 
-        # 设置网格间隔 - 使用动态计算的间隔
+        # 创建新的网格布局（只包含单元格）
+        self.grid_layout = QGridLayout(self.grid_container)
         spacing = config.calculate_spacing(config.PREVIEW_CELL_HEIGHT)
         self.grid_layout.setSpacing(spacing)
 
+        # 重新创建标尺
+        self._create_rulers()
+
+        # 创建网格单元格
         self.cells = []
-        self.row_rulers = []
-        self.col_rulers = []
-
-        # 创建左上角空白区域
-        corner_label = QLabel()
-        corner_label.setFixedSize(30, 30)
-        corner_label.setStyleSheet(
-            """
-            QLabel {
-                border: 1px solid #cccccc;
-                background-color: #f8f8f8;
-            }
-        """
-        )
-        self.grid_layout.addWidget(corner_label, 0, 0)
-
-        # 创建列标尺（顶部）
-        for col in range(self.model.cols):
-            col_ruler = RulerLabel(str(col), is_horizontal=True)
-            self.col_rulers.append(col_ruler)
-            self.grid_layout.addWidget(col_ruler, 0, col + 1)
-
-        # 创建行标尺和网格单元格
         for row in range(self.model.rows):
-            # 创建行标尺（左侧）
-            row_ruler = RulerLabel(str(row), is_horizontal=False)
-            self.row_rulers.append(row_ruler)
-            self.grid_layout.addWidget(row_ruler, row + 1, 0)
-
-            # 创建该行的单元格
             cell_row = []
             for col in range(self.model.cols):
                 cell_widget = GridCellWidget(row, col)
                 cell_widget.clicked.connect(self._on_cell_clicked)
                 cell_widget.mouse_entered.connect(self._on_cell_mouse_entered)
                 cell_widget.mouse_left.connect(self._on_cell_mouse_left)
-                self.grid_layout.addWidget(cell_widget, row + 1, col + 1)
+                self.grid_layout.addWidget(cell_widget, row, col)
                 cell_row.append(cell_widget)
             self.cells.append(cell_row)
 
         # 更新显示
         self.refresh_display()
+
+    def _clear_rulers(self):
+        """清除旧的标尺"""
+        # 清除列标尺
+        while self.top_ruler_layout.count():
+            child = self.top_ruler_layout.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+
+        # 清除行标尺
+        while self.left_ruler_layout.count():
+            child = self.left_ruler_layout.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+
+        self.row_rulers = []
+        self.col_rulers = []
+
+    def _create_rulers(self):
+        """创建标尺"""
+        # 创建列标尺（顶部）
+        for col in range(self.model.cols):
+            col_ruler = RulerLabel(str(col), is_horizontal=True)
+            self.col_rulers.append(col_ruler)
+            self.top_ruler_layout.addWidget(col_ruler)
+
+        # 创建行标尺（左侧）
+        for row in range(self.model.rows):
+            row_ruler = RulerLabel(str(row), is_horizontal=False)
+            self.row_rulers.append(row_ruler)
+            self.left_ruler_layout.addWidget(row_ruler)
 
     def _on_cell_clicked(self, row: int, col: int):
         """单元格点击处理"""
