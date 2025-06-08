@@ -14,7 +14,9 @@ from PySide6.QtWidgets import (
     QScrollArea,
     QCheckBox,
     QSpinBox,
+    QComboBox,
     QMessageBox,
+    QColorDialog,
 )
 from PySide6.QtCore import Qt
 
@@ -32,6 +34,9 @@ class PreviewWindow(QDialog):
         self.exporter = PuzzleExporter(model)
         self.setWindowTitle("拼图预览")
         self.setModal(False)
+
+        # 存储自定义背景色
+        self.custom_bg_color = Qt.white
 
         # 设置窗口标志，支持最大化、最小化和调整大小
         self.setWindowFlags(
@@ -73,6 +78,11 @@ class PreviewWindow(QDialog):
         self.auto_scale_checkbox.stateChanged.connect(self.update_preview)
         control_layout.addWidget(self.auto_scale_checkbox)
 
+        self.show_indices_checkbox = QCheckBox("显示行列号")
+        self.show_indices_checkbox.setChecked(False)  # 默认不显示行列号
+        self.show_indices_checkbox.stateChanged.connect(self.update_preview)
+        control_layout.addWidget(self.show_indices_checkbox)
+
         # 添加间隔设置
         control_layout.addWidget(QLabel("间隔:"))
         self.spacing_spinbox = QSpinBox()
@@ -82,6 +92,14 @@ class PreviewWindow(QDialog):
         self.spacing_spinbox.setSuffix(" px")
         self.spacing_spinbox.valueChanged.connect(self.update_preview)
         control_layout.addWidget(self.spacing_spinbox)
+
+        # 添加背景色设置
+        control_layout.addWidget(QLabel("背景色:"))
+        self.bg_color_combo = QComboBox()
+        self.bg_color_combo.addItems(["白色", "灰色", "黑色", "自定义..."])
+        self.bg_color_combo.setCurrentText("白色")  # 默认白色
+        self.bg_color_combo.currentTextChanged.connect(self._on_bg_color_changed)
+        control_layout.addWidget(self.bg_color_combo)
 
         control_layout.addStretch()  # 添加弹簧使控件左对齐
         layout.addLayout(control_layout)
@@ -186,7 +204,7 @@ class PreviewWindow(QDialog):
                 else:
                     area_info = "无图片"
 
-                # 添加网格状态和间隔信息
+                # 添加网格状态、间隔信息、行列号状态和背景色信息
                 grid_status = (
                     "显示网格" if self.show_grid_checkbox.isChecked() else "隐藏网格"
                 )
@@ -194,6 +212,12 @@ class PreviewWindow(QDialog):
                 spacing_info = (
                     "自动间隔" if spacing_value == -1 else f"{spacing_value}px间隔"
                 )
+                indices_status = (
+                    "显示行列号"
+                    if self.show_indices_checkbox.isChecked()
+                    else "隐藏行列号"
+                )
+                bg_color_status = f"背景: {self.bg_color_combo.currentText()}"
 
                 # 显示原始尺寸和缩放后尺寸
                 if self.auto_scale_checkbox.isChecked() and scaled_size != size:
@@ -207,6 +231,8 @@ class PreviewWindow(QDialog):
                         area_info,
                         grid_status,
                         spacing_info,
+                        indices_status,
+                        bg_color_status,
                     ]
                 else:
                     info_parts = [
@@ -214,6 +240,8 @@ class PreviewWindow(QDialog):
                         area_info,
                         grid_status,
                         spacing_info,
+                        indices_status,
+                        bg_color_status,
                     ]
 
                 self.info_label.setText(" | ".join(info_parts))
@@ -267,20 +295,57 @@ class PreviewWindow(QDialog):
             new_width, new_height, Qt.KeepAspectRatio, Qt.SmoothTransformation
         )
 
+    def _get_background_color(self):
+        """根据选择获取背景色"""
+        color_text = self.bg_color_combo.currentText()
+        if color_text == "白色":
+            return Qt.white
+        elif color_text == "灰色":
+            return Qt.lightGray
+        elif color_text == "黑色":
+            return Qt.black
+        elif color_text == "自定义...":
+            return self.custom_bg_color
+        else:
+            return Qt.white  # 默认白色
+
+    def _on_bg_color_changed(self, color_text):
+        """处理背景色变化"""
+        if color_text == "自定义...":
+            # 打开颜色选择对话框
+            color = QColorDialog.getColor(self.custom_bg_color, self, "选择背景色")
+            if color.isValid():
+                self.custom_bg_color = color
+                self.update_preview()
+            else:
+                # 如果用户取消选择，恢复到之前的选项
+                # 找到非"自定义..."的选项
+                for i in range(self.bg_color_combo.count()):
+                    if self.bg_color_combo.itemText(i) != "自定义...":
+                        self.bg_color_combo.setCurrentIndex(i)
+                        break
+        else:
+            self.update_preview()
+
     def _create_preview_image(self):
         """创建预览图片"""
         # 使用固定的预览尺寸
         cell_width = config.PREVIEW_CELL_WIDTH
         cell_height = config.PREVIEW_CELL_HEIGHT
 
-        # 根据复选框状态决定是否显示网格和背景色
+        # 根据复选框状态决定是否显示网格
         show_grid = self.show_grid_checkbox.isChecked()
-        bg_color = Qt.lightGray if show_grid else Qt.white
+
+        # 获取选择的背景色
+        bg_color = self._get_background_color()
 
         # 获取自定义间隔设置
         custom_spacing = (
             self.spacing_spinbox.value() if self.spacing_spinbox.value() != -1 else None
         )
+
+        # 获取行列号显示设置
+        show_indices = self.show_indices_checkbox.isChecked()
 
         # 使用导出器生成预览图片
         return self.exporter.create_puzzle_image(
@@ -289,6 +354,7 @@ class PreviewWindow(QDialog):
             bg_color=bg_color,
             draw_grid=show_grid,
             custom_spacing=custom_spacing,
+            show_indices=show_indices,
         )
 
 

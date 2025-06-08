@@ -133,6 +133,7 @@ class PuzzleExporter:
         bg_color=Qt.white,
         draw_grid=False,
         custom_spacing=None,
+        show_indices=False,
     ):
         """
         创建拼图图片
@@ -176,12 +177,10 @@ class PuzzleExporter:
             cell_height * valid_rows + spacing * (valid_rows - 1)
             if valid_rows > 1
             else cell_height * valid_rows
-        )
-
-        # 创建输出图片
+        )  # 创建输出图片
         output_pixmap = QPixmap(total_width, total_height)
-        # 使用浅灰色背景，使间隔更明显
-        output_pixmap.fill(Qt.lightGray if draw_grid else bg_color)
+        # 使用指定的背景颜色
+        output_pixmap.fill(bg_color)
 
         painter = QPainter(output_pixmap)
         try:
@@ -224,9 +223,9 @@ class PuzzleExporter:
                         else:
                             # 横屏图片：标准1个格子
                             target_width = cell_width
-                            target_height = cell_height
-
-                        # 绘制单元格背景（如果需要显示间隔）
+                            target_height = (
+                                cell_height  # 绘制单元格背景（如果需要显示间隔）
+                            )
                         if draw_grid:
                             painter.fillRect(
                                 x, y, target_width, target_height, Qt.white
@@ -248,6 +247,27 @@ class PuzzleExporter:
                             draw_y = y + (target_height - scaled_pixmap.height()) // 2
 
                             painter.drawPixmap(draw_x, draw_y, scaled_pixmap)
+
+            # 绘制行号和列号
+            if show_indices:
+                painter.setPen(Qt.red)
+                painter.setFont(painter.font())
+                font = painter.font()
+                font.setPointSize(max(8, min(cell_width, cell_height) // 10))
+                font.setBold(True)
+                painter.setFont(font)
+
+                # 绘制列号（在顶部）
+                for col in range(min_col, max_col + 1):
+                    relative_col = col - min_col
+                    x = relative_col * (cell_width + spacing) + cell_width // 2
+                    painter.drawText(x - 10, 15, f"{col}")
+
+                # 绘制行号（在左侧）
+                for row in range(min_row, max_row + 1):
+                    relative_row = row - min_row
+                    y = relative_row * (cell_height + spacing) + cell_height // 2
+                    painter.drawText(5, y + 5, f"{row}")
 
         finally:
             painter.end()
